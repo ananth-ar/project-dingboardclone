@@ -74,10 +74,10 @@ const updateCanvas = (
   pan: Point,
   scale: number
 ): void => {
-  // ctx.save();
-  // ctx.setTransform(1, 0, 0, 1, 0, 0);
-  // ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  // ctx.restore();
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
 
   ctx.save();
   ctx.scale(scale, scale);
@@ -139,6 +139,7 @@ const Editor: React.FC = () => {
   const [drawingMode, setDrawingMode] = useState<boolean>(false);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [scale, setScale] = useState<number>(1);
+  const [isHolding, setIsHolding] = useState<boolean>(false);
 
   const getCoordinates = useCallback(
     (e: MouseEvent): Point => {
@@ -299,7 +300,6 @@ const Editor: React.FC = () => {
 
   const handlePan = useCallback((e: MouseEvent) => {
     if (e.buttons === 4) {
-      // Middle mouse button
       setPan((prevPan) => ({
         x: prevPan.x + e.movementX,
         y: prevPan.y + e.movementY,
@@ -308,9 +308,23 @@ const Editor: React.FC = () => {
   }, []);
 
   const handleWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale((prevScale) => prevScale * delta);
+    if (e.ctrlKey) {
+      e.preventDefault(); 
+
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const mouseX = e.clientX - (rect?.left ?? 0);
+      const mouseY = e.clientY - (rect?.top ?? 0);
+
+      setScale((prevScale) => {
+        const newScale = prevScale * delta;
+        setPan((prevPan) => ({
+          x: prevPan.x - mouseX * (newScale - prevScale),
+          y: prevPan.y - mouseY * (newScale - prevScale),
+        }));
+        return newScale;
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -331,6 +345,7 @@ const Editor: React.FC = () => {
     resizeCanvas();
 
     const handleMouseDown = (e: MouseEvent) => {
+      setIsHolding(true);
       if (!drawingMode) {
         startDragging(e);
       }
@@ -344,6 +359,7 @@ const Editor: React.FC = () => {
     };
 
     const handleMouseUp = () => {
+      setIsHolding(false);
       if (!drawingMode && isDragging) {
         stopDragging();
       }
@@ -359,7 +375,7 @@ const Editor: React.FC = () => {
     canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("click", handleCanvasClick);
-    // canvas.addEventListener("wheel", handleWheel);
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
 
     if (drawingMode) {
       canvas.addEventListener("mousedown", startDrawing);
