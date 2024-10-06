@@ -70,36 +70,25 @@ const drawBorder = (ctx: CanvasRenderingContext2D, item: DrawingItem) => {
 const updateCanvas = (
   ctx: CanvasRenderingContext2D,
   state: CanvasState,
-  draggedItemId: string | null,
-  pan: Point,
-  scale: number
+  draggedItemId: string | null
 ): void => {
-  // ctx.save();
-  // ctx.setTransform(1, 0, 0, 1, 0, 0);
-  // ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  // ctx.restore();
-
-  ctx.save();
-  ctx.scale(scale, scale);
-  ctx.translate(pan.x / scale, pan.y / scale);
-
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   state.items.forEach((item) => {
     item.lines.forEach((line) =>
       drawLine(ctx, line, item.position.x, item.position.y)
     );
     drawBorder(ctx, item);
 
+    // Highlight the border if the item is being dragged
     if (item.id === draggedItemId) {
-      ctx.strokeStyle = "red";
-      ctx.lineWidth = (BORDER_WIDTH * 2) / scale;
+      ctx.strokeStyle = "red"; // Use a distinct color for the dragged item
+      ctx.lineWidth = BORDER_WIDTH * 2; // Make the border thicker
       drawBorder(ctx, item);
     }
   });
   if (state.currentLine) {
     drawLine(ctx, state.currentLine, 0, 0);
   }
-
-  ctx.restore();
 };
 
 const calculateBounds = (
@@ -134,26 +123,19 @@ const Editor: React.FC = () => {
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
-  const [selectedItemPosition, setSelectedItemPosition] =
-    useState<Point | null>(null);
   const [drawingMode, setDrawingMode] = useState<boolean>(false);
-  const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
-  const [scale, setScale] = useState<number>(1);
 
-  const getCoordinates = useCallback(
-    (e: MouseEvent): Point => {
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        return { x: 0, y: 0 };
-      }
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: (e.clientX - rect.left - pan.x) / scale,
-        y: (e.clientY - rect.top - pan.y) / scale,
-      };
-    },
-    [pan, scale]
-  );
+  const getCoordinates = (e: MouseEvent): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return { x: 0, y: 0 };
+    }
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  };
 
   const startDrawing = useCallback(
     (e: MouseEvent) => {
@@ -161,7 +143,7 @@ const Editor: React.FC = () => {
       canvasState.currentLine = { points: [{ x, y }], color };
       setIsDrawing(true);
     },
-    [color, getCoordinates]
+    [color]
   );
 
   const draw = useCallback(
@@ -172,11 +154,11 @@ const Editor: React.FC = () => {
         canvasState.currentLine.points.push({ x, y });
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem, pan, scale);
+          updateCanvas(ctx, canvasState, draggedItem);
         }
       }
     },
-    [isDrawing, draggedItem, getCoordinates, pan, scale]
+    [isDrawing, draggedItem]
   );
 
   const stopDrawing = useCallback(() => {
@@ -187,17 +169,42 @@ const Editor: React.FC = () => {
         lines: [canvasState.currentLine],
         position: { x: 0, y: 0 },
         bounds: bounds,
-        borderColor: "#bebebe",
+        borderColor: "#bebebe", //`#${Math.floor(Math.random() * 16777215).toString(16)}` // Random color
       };
       canvasState.items.push(newItem);
       canvasState.currentLine = null;
       setIsDrawing(false);
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx) {
-        updateCanvas(ctx, canvasState, draggedItem, pan, scale);
+        updateCanvas(ctx, canvasState, draggedItem);
       }
     }
-  }, [isDrawing, draggedItem, pan, scale]);
+  }, [isDrawing, draggedItem]);
+
+  const isPointOnLine = (
+    x: number,
+    y: number,
+    line: Line,
+    offsetX: number,
+    offsetY: number
+  ): boolean => {
+    for (let i = 1; i < line.points.length; i++) {
+      const x1 = line.points[i - 1].x + offsetX;
+      const y1 = line.points[i - 1].y + offsetY;
+      const x2 = line.points[i].x + offsetX;
+      const y2 = line.points[i].y + offsetY;
+
+      const distance =
+        Math.abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) /
+        Math.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2);
+
+      if (distance < 5) {
+        // 5 pixels tolerance
+        return true;
+      }
+    }
+    return false;
+  };
 
   const startDragging = useCallback(
     (e: MouseEvent) => {
@@ -219,9 +226,10 @@ const Editor: React.FC = () => {
           return;
         }
       }
+      // If we didn't hit any existing item, start a new drawing
       if (drawingMode) startDrawing(e);
     },
-    [drawingMode, startDrawing, getCoordinates]
+    [startDrawing]
   );
 
   const drag = useCallback(
@@ -238,11 +246,11 @@ const Editor: React.FC = () => {
         };
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem, pan, scale);
+          updateCanvas(ctx, canvasState, draggedItem);
         }
       }
     },
-    [isDragging, draggedItem, dragOffset, getCoordinates, pan, scale]
+    [isDragging, draggedItem, dragOffset]
   );
 
   const stopDragging = useCallback(() => {
@@ -250,31 +258,26 @@ const Editor: React.FC = () => {
     setDraggedItem(null);
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx) {
-      updateCanvas(ctx, canvasState, null, pan, scale);
+      updateCanvas(ctx, canvasState, null);
     }
-  }, [pan, scale]);
+  }, []);
 
-  const handleClick = useCallback(
-    (e: MouseEvent) => {
-      const { x, y } = getCoordinates(e);
-      for (let i = canvasState.items.length - 1; i > -1; i--) {
-        const item = canvasState.items[i];
-        if (
-          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
-          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
-          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
-          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
-        ) {
-          setSelectedItem(item.id);
-          setSelectedItemPosition({ x: e.clientX, y: e.clientY });
-          return;
-        }
+  const handleClick = useCallback((e: MouseEvent) => {
+    const { x, y } = getCoordinates(e);
+    for (let i = canvasState.items.length - 1; i > -1; i--) {
+      const item = canvasState.items[i];
+      if (
+        x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+        x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+        y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+        y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+      ) {
+        setSelectedItem(item.id);
+        return;
       }
-      setSelectedItem(null);
-      setSelectedItemPosition(null);
-    },
-    [getCoordinates]
-  );
+    }
+    setSelectedItem(null);
+  }, []);
 
   const moveItemToBack = useCallback(() => {
     if (selectedItem) {
@@ -287,63 +290,35 @@ const Editor: React.FC = () => {
         setSelectedItem(null);
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, null, pan, scale);
+          updateCanvas(ctx, canvasState, null);
         }
       }
     }
-  }, [selectedItem, pan, scale]);
+  }, [selectedItem]);
 
   const toggleDrawingMode = useCallback(() => {
     setDrawingMode((prevMode) => !prevMode);
   }, []);
 
-  const handlePan = useCallback((e: MouseEvent) => {
-    if (e.buttons === 4) {
-      // Middle mouse button
-      setPan((prevPan) => ({
-        x: prevPan.x + e.movementX,
-        y: prevPan.y + e.movementY,
-      }));
-    }
-  }, []);
-
-  const handleWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale((prevScale) => prevScale * delta);
-  }, []);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.setTransform(scale, 0, 0, scale, pan.x, pan.y);
-        updateCanvas(ctx, canvasState, draggedItem, pan, scale);
-      }
-    };
-
-    window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
     const handleMouseDown = (e: MouseEvent) => {
       if (!drawingMode) {
-        startDragging(e);
+        startDragging(e as unknown as MouseEvent);
       }
     };
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!drawingMode && isDragging) {
-        drag(e);
+        drag(e as unknown as MouseEvent);
       }
-      handlePan(e);
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       if (!drawingMode && isDragging) {
         stopDragging();
       }
@@ -351,7 +326,7 @@ const Editor: React.FC = () => {
 
     const handleCanvasClick = (e: MouseEvent) => {
       if (!drawingMode) {
-        handleClick(e);
+        handleClick(e as unknown as MouseEvent);
       }
     };
 
@@ -359,7 +334,6 @@ const Editor: React.FC = () => {
     canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("click", handleCanvasClick);
-    // canvas.addEventListener("wheel", handleWheel);
 
     if (drawingMode) {
       canvas.addEventListener("mousedown", startDrawing);
@@ -369,12 +343,11 @@ const Editor: React.FC = () => {
     }
 
     return () => {
-      window.removeEventListener("resize", resizeCanvas);
       canvas.removeEventListener("mousedown", handleMouseDown);
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("click", handleCanvasClick);
-      canvas.removeEventListener("wheel", handleWheel);
+
       canvas.removeEventListener("mousedown", startDrawing);
       canvas.removeEventListener("mousemove", draw);
       canvas.removeEventListener("mouseup", stopDrawing);
@@ -390,30 +363,17 @@ const Editor: React.FC = () => {
     startDrawing,
     draw,
     stopDrawing,
-    handlePan,
-    handleWheel,
-    pan,
-    scale,
-    draggedItem,
   ]);
 
   return (
-    <div style={{ position: "relative" }}>
+    <div>
       <canvas
         ref={canvasRef}
-        style={{ position: "absolute", top: 0, left: 0 }}
+        width={800}
+        height={600}
+        style={{ border: "1px solid #000" }}
       />
-      <div
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 10,
-          display: "flex",
-          gap: "10px",
-        }}
-      >
+      <div>
         <button onClick={toggleDrawingMode}>
           {drawingMode ? "Stop Drawing" : "Draw"}
         </button>
@@ -424,20 +384,15 @@ const Editor: React.FC = () => {
             setColor(e.target.value)
           }
         />
+        {selectedItem && (
+          <button
+            className="mx-1 bg-green-600 py-1 px-2 rounded-sm"
+            onClick={moveItemToBack}
+          >
+            Move to Back
+          </button>
+        )}
       </div>
-      {selectedItem && selectedItemPosition && (
-        <button
-          style={{
-            position: "absolute",
-            left: `${selectedItemPosition.x}px`,
-            top: `${selectedItemPosition.y}px`,
-            zIndex: 10,
-          }}
-          onClick={moveItemToBack}
-        >
-          Move to Back
-        </button>
-      )}
     </div>
   );
 };
