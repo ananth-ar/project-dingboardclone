@@ -377,10 +377,10 @@ const Editor: React.FC = () => {
     canvas.addEventListener("wheel", handleWheel, { passive: false });
 
     if (drawingMode) {
-      canvas.addEventListener("mousedown", startDrawing);
-      canvas.addEventListener("mousemove", draw);
-      canvas.addEventListener("mouseup", stopDrawing);
-      canvas.addEventListener("mouseout", stopDrawing);
+        canvas.addEventListener("mousedown", startDrawing);
+        canvas.addEventListener("mousemove", draw);
+        canvas.addEventListener("mouseup", stopDrawing);
+        canvas.addEventListener("mouseout", stopDrawing);
     }
 
     return () => {
