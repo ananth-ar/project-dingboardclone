@@ -1,4 +1,4 @@
-"use client";
+"use client"
 import React, { useRef, useEffect, useState, MouseEvent } from "react";
 
 interface PanOffset {
@@ -29,22 +29,11 @@ const CanvasPathDemo: React.FC = () => {
       ctx.save();
       ctx.translate(panOffset.x, panOffset.y);
 
-      // Original path drawing code
+
       ctx.beginPath();
       ctx.moveTo(50, 50);
       ctx.lineTo(100, 100);
-
-      ctx.save();
-
-      ctx.strokeStyle = "red";
-      ctx.lineWidth = 5;
-
       ctx.lineTo(150, 50);
-
-      ctx.stroke();
-
-      ctx.restore();
-
       ctx.lineTo(200, 100);
       ctx.stroke();
 
@@ -54,18 +43,22 @@ const CanvasPathDemo: React.FC = () => {
     draw();
   }, [panOffset]);
 
-  const handleMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = (
+    e: React.MouseEvent<HTMLCanvasElement>
+  ) => {
     setIsPanning(true);
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
   };
 
-  const handleMouseMove = (e: MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = (
+    e: React.MouseEvent<HTMLCanvasElement>
+  ) => {
     if (!isPanning) return;
 
     const dx = e.clientX - lastMousePosRef.current.x;
     const dy = e.clientY - lastMousePosRef.current.y;
 
-    setPanOffset((prev: PanOffset) => ({
+    setPanOffset((prev) => ({
       x: prev.x + dx,
       y: prev.y + dy,
     }));
@@ -74,6 +67,10 @@ const CanvasPathDemo: React.FC = () => {
   };
 
   const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const handleMouseLeave = () => {
     setIsPanning(false);
   };
 
@@ -89,8 +86,8 @@ const CanvasPathDemo: React.FC = () => {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    />
+      onMouseLeave={handleMouseLeave}  
+    />  
   );
 };
 
