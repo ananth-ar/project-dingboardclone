@@ -126,23 +126,27 @@ const calculateBounds = (
   return { minX, minY, maxX, maxY };
 };
 
-const Editor: React.FC = () => {
+const Editor = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [color, setColor] = useState<string>("#000000");
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
-  const [selectedItemPosition, setSelectedItemPosition] =
-    useState<Point | null>(null);
+  const [selectedItemPosition, setSelectedItemPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [drawingMode, setDrawingMode] = useState<boolean>(false);
-  const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [scale, setScale] = useState<number>(1);
-  const [isHolding, setIsHolding] = useState<boolean>(false);
 
   const getCoordinates = useCallback(
-    (e: MouseEvent): Point => {
+    (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
       const canvas = canvasRef.current;
       if (!canvas) {
         return { x: 0, y: 0 };
@@ -157,7 +161,7 @@ const Editor: React.FC = () => {
   );
 
   const startDrawing = useCallback(
-    (e: MouseEvent) => {
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
       const { x, y } = getCoordinates(e);
       canvasState.currentLine = { points: [{ x, y }], color };
       setIsDrawing(true);
@@ -166,7 +170,7 @@ const Editor: React.FC = () => {
   );
 
   const draw = useCallback(
-    (e: MouseEvent) => {
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       const { x, y } = getCoordinates(e);
       if (canvasState.currentLine) {
@@ -183,7 +187,7 @@ const Editor: React.FC = () => {
   const stopDrawing = useCallback(() => {
     if (isDrawing && canvasState.currentLine) {
       const bounds = calculateBounds([canvasState.currentLine]);
-      const newItem: DrawingItem = {
+      const newItem = {
         id: `drawing-${Date.now()}`,
         lines: [canvasState.currentLine],
         position: { x: 0, y: 0 },
@@ -201,7 +205,7 @@ const Editor: React.FC = () => {
   }, [isDrawing, draggedItem, pan, scale]);
 
   const startDragging = useCallback(
-    (e: MouseEvent) => {
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
       const { x, y } = getCoordinates(e);
       for (let i = canvasState.items.length - 1; i >= 0; i--) {
         const item = canvasState.items[i];
@@ -226,7 +230,7 @@ const Editor: React.FC = () => {
   );
 
   const drag = useCallback(
-    (e: MouseEvent) => {
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDragging || !draggedItem) return;
       const { x, y } = getCoordinates(e);
       const itemIndex = canvasState.items.findIndex(
@@ -256,7 +260,7 @@ const Editor: React.FC = () => {
   }, [pan, scale]);
 
   const handleClick = useCallback(
-    (e: MouseEvent) => {
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
       const { x, y } = getCoordinates(e);
       for (let i = canvasState.items.length - 1; i > -1; i--) {
         const item = canvasState.items[i];
@@ -298,7 +302,7 @@ const Editor: React.FC = () => {
     setDrawingMode((prevMode) => !prevMode);
   }, []);
 
-  const handlePan = useCallback((e: MouseEvent) => {
+  const handlePan = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (e.buttons === 4) {
       setPan((prevPan) => ({
         x: prevPan.x + e.movementX,
@@ -307,7 +311,7 @@ const Editor: React.FC = () => {
     }
   }, []);
 
-  const handleWheel = useCallback((e: WheelEvent) => {
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     if (e.ctrlKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -326,6 +330,37 @@ const Editor: React.FC = () => {
     }
   }, []);
 
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!drawingMode) {
+        startDragging(e);
+      } else {
+        startDrawing(e);
+      }
+    },
+    [drawingMode, startDragging, startDrawing]
+  );
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!drawingMode && isDragging) {
+        drag(e);
+      } else if (drawingMode && isDrawing) {
+        draw(e);
+      }
+      handlePan(e);
+    },
+    [drawingMode, isDragging, isDrawing, drag, draw, handlePan]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    if (!drawingMode && isDragging) {
+      stopDragging();
+    } else if (drawingMode) {
+      stopDrawing();
+    }
+  }, [drawingMode, isDragging, stopDragging, stopDrawing]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -343,80 +378,21 @@ const Editor: React.FC = () => {
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
 
-    const handleMouseDown = (e: MouseEvent) => {
-      setIsHolding(true);
-      if (!drawingMode) {
-        startDragging(e);
-      }
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!drawingMode && isDragging) {
-        drag(e);
-      }
-      handlePan(e);
-    };
-
-    const handleMouseUp = () => {
-      setIsHolding(false);
-      if (!drawingMode && isDragging) {
-        stopDragging();
-      }
-    };
-
-    const handleCanvasClick = (e: MouseEvent) => {
-      if (!drawingMode) {
-        handleClick(e);
-      }
-    };
-
-    canvas.addEventListener("mousedown", handleMouseDown);
-    canvas.addEventListener("mousemove", handleMouseMove);
-    canvas.addEventListener("mouseup", handleMouseUp);
-    canvas.addEventListener("click", handleCanvasClick);
-    canvas.addEventListener("wheel", handleWheel, { passive: false });
-
-    if (drawingMode) {
-      canvas.addEventListener("mousedown", startDrawing);
-      canvas.addEventListener("mousemove", draw);
-      canvas.addEventListener("mouseup", stopDrawing);
-      canvas.addEventListener("mouseout", stopDrawing);
-    }
-
     return () => {
       window.removeEventListener("resize", resizeCanvas);
-      canvas.removeEventListener("mousedown", handleMouseDown);
-      canvas.removeEventListener("mousemove", handleMouseMove);
-      canvas.removeEventListener("mouseup", handleMouseUp);
-      canvas.removeEventListener("click", handleCanvasClick);
-      canvas.removeEventListener("wheel", handleWheel);
-      canvas.removeEventListener("mousedown", startDrawing);
-      canvas.removeEventListener("mousemove", draw);
-      canvas.removeEventListener("mouseup", stopDrawing);
-      canvas.removeEventListener("mouseout", stopDrawing);
     };
-  }, [
-    startDragging,
-    drag,
-    stopDragging,
-    handleClick,
-    drawingMode,
-    isDragging,
-    startDrawing,
-    draw,
-    stopDrawing,
-    handlePan,
-    handleWheel,
-    pan,
-    scale,
-    draggedItem,
-  ]);
+  }, [pan, scale, draggedItem]);
 
   return (
     <div style={{ position: "relative" }}>
       <canvas
         ref={canvasRef}
         style={{ position: "absolute", top: 0, left: 0 }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onClick={handleClick}
+        onWheel={handleWheel}
       />
       <div
         style={{
