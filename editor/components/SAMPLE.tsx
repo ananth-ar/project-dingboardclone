@@ -79,9 +79,6 @@ const updateCanvas = (
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 
-  ctx.save();
-  ctx.scale(scale, scale);
-  ctx.translate(pan.x / scale, pan.y / scale);
 
   state.items.forEach((item) => {
     item.lines.forEach((line) =>
@@ -94,12 +91,12 @@ const updateCanvas = (
       ctx.lineWidth = (BORDER_WIDTH * 2) / scale;
       drawBorder(ctx, item);
     }
+    
   });
   if (state.currentLine) {
     drawLine(ctx, state.currentLine, 0, 0);
   }
 
-  ctx.restore();
 };
 
 const calculateBounds = (
@@ -144,6 +141,7 @@ const Editor = () => {
   const [drawingMode, setDrawingMode] = useState<boolean>(false);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [scale, setScale] = useState<number>(1);
+  const lastMousePosRef = useRef({ x: 0, y: 0 });
 
   const getCoordinates = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
@@ -173,6 +171,7 @@ const Editor = () => {
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       const { x, y } = getCoordinates(e);
+ 
       if (canvasState.currentLine) {
         canvasState.currentLine.points.push({ x, y });
         const ctx = canvasRef.current?.getContext("2d");
@@ -217,6 +216,7 @@ const Editor = () => {
         ) {
           setIsDragging(true);
           setDraggedItem(item.id);
+          console.log("x y ", x - item.position.x, y - item.position.y);
           setDragOffset({
             x: x - item.position.x,
             y: y - item.position.y,
@@ -304,31 +304,37 @@ const Editor = () => {
 
   const handlePan = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (e.buttons === 4) {
-      setPan((prevPan) => ({
-        x: prevPan.x + e.movementX,
-        y: prevPan.y + e.movementY,
+      const dx = e.clientX - lastMousePosRef.current.x;
+      const dy = e.clientY - lastMousePosRef.current.y;
+      setPan((prevOffset) => ({
+        x: prevOffset.x + dx,
+        y: prevOffset.y + dy,
       }));
+
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     }
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
-    if (e.ctrlKey) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const rect = canvasRef.current?.getBoundingClientRect();
-      const mouseX = e.clientX - (rect?.left ?? 0);
-      const mouseY = e.clientY - (rect?.top ?? 0);
+  const handleWheel = useCallback(
+    (e: React.WheelEvent<HTMLCanvasElement>) => {
+      if (e.ctrlKey) {
+        const zoomIntensity = 0.1;
+        const wheel = e.deltaY < 0 ? 1 : -1;
+        const zoom = Math.exp(wheel * zoomIntensity);
 
-      setScale((prevScale) => {
-        const newScale = prevScale * delta;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const x = e.clientX - (rect?.left ?? 0);
+        const y = e.clientY - (rect?.top ?? 0);
+
+        setScale((prevScale) => prevScale * zoom);
         setPan((prevPan) => ({
-          x: prevPan.x - mouseX * (newScale - prevScale),
-          y: prevPan.y - mouseY * (newScale - prevScale),
+          x: x - (x - prevPan.x) * zoom,
+          y: y - (y - prevPan.y) * zoom,
         }));
-        return newScale;
-      });
-    }
-  }, []);
+      }
+    },
+    [scale, pan]
+  );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -337,6 +343,8 @@ const Editor = () => {
       } else {
         startDrawing(e);
       }
+
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     },
     [drawingMode, startDragging, startDrawing]
   );
@@ -375,11 +383,19 @@ const Editor = () => {
       }
     };
 
+    const preventZoom = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener("wheel", preventZoom, { passive: false });
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
 
     return () => {
       window.removeEventListener("resize", resizeCanvas);
+      window.removeEventListener("wheel", preventZoom);
     };
   }, [pan, scale, draggedItem]);
 

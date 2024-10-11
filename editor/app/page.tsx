@@ -6,5 +6,5 @@ import { Button } from "@/components/ui/button";
 import { Edit } from "lucide-react";
 
 export default function Home() {
-  return <CanvasPathDemo />;
+  return <Editor />;
 }
