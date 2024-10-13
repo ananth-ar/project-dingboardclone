@@ -1,5 +1,10 @@
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from "react";
+import TextCustomizer, {
+  drawText,
+  measureTextBounds,
+  TextData,
+} from "./TextCustomizer";
 
 interface Point {
   x: number;
@@ -11,16 +16,34 @@ interface Line {
   color: string;
 }
 
-interface DrawingItem {
+interface BaseItem {
   id: string;
-  lines: Line[];
+  type: "drawing" | "image" | "text";
   position: Point;
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  borderColor: string;
+  // rotation: number;
+  // scale: number;
 }
 
-interface CanvasState {
-  items: DrawingItem[];
+interface DrawingItem extends BaseItem {
+  type: "drawing";
+  lines: Line[];
+}
+
+interface ImageItem extends BaseItem {
+  type: "image";
+  element: HTMLImageElement;
+}
+
+interface TextItem extends BaseItem {
+  type: "text";
+  textdata: TextData;
+}
+
+type CanvasItem = DrawingItem | ImageItem | TextItem;
+
+export interface CanvasState {
+  items: CanvasItem[];
   currentLine: Line | null;
 }
 
@@ -50,7 +73,11 @@ const drawLine = (
   }
 };
 
-const drawBorder = (ctx: CanvasRenderingContext2D, item: DrawingItem) => {
+const drawBorder = (
+  ctx: CanvasRenderingContext2D,
+  item: CanvasItem,
+  highlightcolor?: string
+) => {
   const { minX, minY, maxX, maxY } = item.bounds;
   const width = maxX - minX + 2 * BORDER_PADDING;
   const height = maxY - minY + 2 * BORDER_PADDING;
@@ -62,41 +89,42 @@ const drawBorder = (ctx: CanvasRenderingContext2D, item: DrawingItem) => {
     width,
     height
   );
-  ctx.strokeStyle = item.borderColor;
-  ctx.lineWidth = BORDER_WIDTH;
-  ctx.stroke();
+  if (highlightcolor) {
+    ctx.strokeStyle = highlightcolor;
+    ctx.lineWidth = BORDER_WIDTH * 2;
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = "violet";
+    ctx.lineWidth = BORDER_WIDTH;
+    ctx.stroke();
+  }
 };
 
 const updateCanvas = (
   ctx: CanvasRenderingContext2D,
   state: CanvasState,
-  draggedItemId: string | null,
-  pan: Point,
-  scale: number
+  draggedItemId: string | null
 ): void => {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 
-
   state.items.forEach((item) => {
-    item.lines.forEach((line) =>
-      drawLine(ctx, line, item.position.x, item.position.y)
-    );
-    drawBorder(ctx, item);
+    if (item.type === "drawing")
+      item.lines.forEach((line) =>
+        drawLine(ctx, line, item.position.x, item.position.y)
+      );
+    else if (item.type === "image")
+      ctx.drawImage(item.element, item.position.x, item.position.y);
+    else if (item.type === "text") drawText(ctx, item.textdata);
 
-    if (item.id === draggedItemId) {
-      ctx.strokeStyle = "red";
-      ctx.lineWidth = (BORDER_WIDTH * 2) / scale;
-      drawBorder(ctx, item);
-    }
-    
+    drawBorder(ctx, item);
+    if (item.id === draggedItemId) drawBorder(ctx, item, "red");
   });
   if (state.currentLine) {
     drawLine(ctx, state.currentLine, 0, 0);
   }
-
 };
 
 const calculateBounds = (
@@ -171,12 +199,12 @@ const Editor = () => {
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       const { x, y } = getCoordinates(e);
- 
+
       if (canvasState.currentLine) {
         canvasState.currentLine.points.push({ x, y });
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem, pan, scale);
+          updateCanvas(ctx, canvasState, draggedItem);
         }
       }
     },
@@ -186,19 +214,19 @@ const Editor = () => {
   const stopDrawing = useCallback(() => {
     if (isDrawing && canvasState.currentLine) {
       const bounds = calculateBounds([canvasState.currentLine]);
-      const newItem = {
+      const newItem: DrawingItem = {
         id: `drawing-${Date.now()}`,
         lines: [canvasState.currentLine],
         position: { x: 0, y: 0 },
         bounds: bounds,
-        borderColor: "#bebebe",
+        type: "drawing",
       };
       canvasState.items.push(newItem);
       canvasState.currentLine = null;
       setIsDrawing(false);
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx) {
-        updateCanvas(ctx, canvasState, draggedItem, pan, scale);
+        updateCanvas(ctx, canvasState, draggedItem);
       }
     }
   }, [isDrawing, draggedItem, pan, scale]);
@@ -243,7 +271,7 @@ const Editor = () => {
         };
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem, pan, scale);
+          updateCanvas(ctx, canvasState, draggedItem);
         }
       }
     },
@@ -255,15 +283,43 @@ const Editor = () => {
     setDraggedItem(null);
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx) {
-      updateCanvas(ctx, canvasState, null, pan, scale);
+      updateCanvas(ctx, canvasState, null);
     }
   }, [pan, scale]);
+
+  const createText = (state: TextData) => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    const x = Math.random() * (1000 - 100);
+    const y = Math.random() * (1000 - 100);
+    canvasState.items.push({
+      id: `text-${Date.now()}`,
+      type: "text",
+      textdata: state,
+      position: {
+        x,
+        y,
+      },
+      bounds: measureTextBounds(ctx, {
+        text: state.text,
+        x,
+        y,
+        fontSize: state.fontSize,
+        fontFamily: state.fontFamily,
+        fontStyle: state.fontStyle,
+        textAlign: state.textAlign,
+        textBaseline: state.textBaseline,
+      }),
+    });
+    updateCanvas(ctx, canvasState, null);
+  };
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const { x, y } = getCoordinates(e);
       for (let i = canvasState.items.length - 1; i > -1; i--) {
         const item = canvasState.items[i];
+        console.log("item", item);
         if (
           x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
           x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
@@ -292,7 +348,7 @@ const Editor = () => {
         setSelectedItem(null);
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, null, pan, scale);
+          updateCanvas(ctx, canvasState, null);
         }
       }
     }
@@ -314,6 +370,40 @@ const Editor = () => {
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     }
   }, []);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event: ProgressEvent<FileReader>) => {
+      const img = new Image();
+      img.onload = () => {
+        const newImageItem: ImageItem = {
+          element: img,
+          type: "image",
+          id: `image-${Date.now()}`,
+          position: {
+            x: Math.random() * (1000 - 100),
+            y: Math.random() * (1000 - 100),
+          },
+          bounds: {
+            minX: 0,
+            minY: 0,
+            maxX: img.width,
+            maxY: img.height,
+          },
+        };
+        canvasState.items.push(newImageItem);
+        const ctx = canvasRef.current?.getContext("2d");
+        if (ctx) {
+          updateCanvas(ctx, canvasState, null);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleWheel = useCallback(
     (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -372,14 +462,14 @@ const Editor = () => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const ctx = canvas.getContext("2d");
 
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.setTransform(scale, 0, 0, scale, pan.x, pan.y);
-        updateCanvas(ctx, canvasState, draggedItem, pan, scale);
+        updateCanvas(ctx, canvasState, draggedItem);
       }
     };
 
@@ -400,27 +490,17 @@ const Editor = () => {
   }, [pan, scale, draggedItem]);
 
   return (
-    <div style={{ position: "relative" }}>
+    <div className="relative ">
       <canvas
         ref={canvasRef}
-        style={{ position: "absolute", top: 0, left: 0 }}
+        className="absolute top-0 left-0"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onClick={handleClick}
         onWheel={handleWheel}
       />
-      <div
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 10,
-          display: "flex",
-          gap: "10px",
-        }}
-      >
+      <div className="absolute top-[10px] left-1/2 transform -translate-x-1/2 z-10 flex gap-2.5">
         <button onClick={toggleDrawingMode}>
           {drawingMode ? "Stop Drawing" : "Draw"}
         </button>
@@ -431,14 +511,28 @@ const Editor = () => {
             setColor(e.target.value)
           }
         />
+        <label
+          htmlFor="imageUpload"
+          className="cursor-pointer bg-blue-500 text-white rounded-full px-2 hover:bg-blue-600 transition-colors"
+        >
+          upload
+        </label>
+        <input
+          id="imageUpload"
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+        <TextCustomizer createText={createText} />
       </div>
+      <div className="absolute bottom-4 right-4"></div>
       {selectedItem && selectedItemPosition && (
         <button
+          className="absolute z-10"
           style={{
-            position: "absolute",
             left: `${selectedItemPosition.x}px`,
             top: `${selectedItemPosition.y}px`,
-            zIndex: 10,
           }}
           onClick={moveItemToBack}
         >
