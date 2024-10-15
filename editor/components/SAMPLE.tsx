@@ -29,6 +29,8 @@ interface DrawingItem extends BaseItem {
 interface ImageItem extends BaseItem {
   type: "image";
   element: HTMLImageElement;
+  originalHeight: number;
+  originalWidth: number;
 }
 
 export interface TextItem extends BaseItem {
@@ -125,11 +127,7 @@ const updateCanvas = (
   ctx.restore();
 
   state.items.forEach((item) => {
-    if (item.type === "drawing")
-      item.lines.forEach((line) =>
-        drawLine(ctx, line, item.position.x, item.position.y)
-      );
-    else if (item.type === "image")
+    if (item.type === "image")
       ctx.drawImage(item.element, item.position.x, item.position.y);
     else if (item.type === "text") drawText(ctx, item);
 
@@ -183,6 +181,7 @@ const Editor = () => {
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [scale, setScale] = useState<number>(1);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const [showItemOptions, setShowItemOptions] = useState<boolean>(false);
 
   const getCoordinates = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
@@ -212,7 +211,6 @@ const Editor = () => {
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       const { x, y } = getCoordinates(e);
-
       if (canvasState.currentLine) {
         canvasState.currentLine.points.push({ x, y });
         const ctx = canvasRef.current?.getContext("2d");
@@ -224,25 +222,178 @@ const Editor = () => {
     [isDrawing, draggedItem, getCoordinates, pan, scale]
   );
 
+  // const stopDrawing = useCallback(() => {
+  //   if (isDrawing && canvasState.currentLine) {
+  //     canvasState.currentLine = null;
+  //     setIsDrawing(false);
+  //     const ctx = canvasRef.current?.getContext("2d");
+  //     if (ctx) {
+  //       updateCanvas(ctx, canvasState, draggedItem);
+  //     }
+  //   }
+  // }, [isDrawing, draggedItem, pan, scale]);
+
+  // const stopDrawing = useCallback(() => {
+  //   if (isDrawing && canvasState.currentLine) {
+  //     const ctx = canvasRef.current?.getContext("2d");
+  //     if (ctx) {
+  //       // Find the image item that the line was drawn on
+  //       const imageItem = canvasState.items.find(
+  //         (item) =>
+  //           item.type === "image" &&
+  //           canvasState.currentLine &&
+  //           canvasState.currentLine.points.some(
+  //             (point) =>
+  //               point.x >= item.position.x + item.bounds.minX &&
+  //               point.x <= item.position.x + item.bounds.maxX &&
+  //               point.y >= item.position.y + item.bounds.minY &&
+  //               point.y <= item.position.y + item.bounds.maxY
+  //           )
+  //       ) as ImageItem | undefined;
+
+  //       if (imageItem) {
+  //         // Create a temporary canvas to draw the merged image
+  //         const tempCanvas = document.createElement("canvas");
+  //         const tempCtx = tempCanvas.getContext("2d");
+  //         if (tempCtx) {
+  //           // Use the original dimensions of the image
+  //           tempCanvas.width = imageItem.originalWidth;
+  //           tempCanvas.height = imageItem.originalHeight;
+
+  //           // Draw the original image
+  //           tempCtx.drawImage(
+  //             imageItem.element,
+  //             0,
+  //             0,
+  //             tempCanvas.width,
+  //             tempCanvas.height
+  //           );
+
+  //           // Calculate the scale factor
+  //           const scaleX =
+  //             imageItem.originalWidth /
+  //             (imageItem.bounds.maxX - imageItem.bounds.minX);
+  //           const scaleY =
+  //             imageItem.originalHeight /
+  //             (imageItem.bounds.maxY - imageItem.bounds.minY);
+
+  //           // Draw the line on top of the image, adjusting for scale
+  //           if (canvasState.currentLine) {
+  //             tempCtx.save();
+  //             tempCtx.scale(scaleX, scaleY);
+  //             drawLine(
+  //               tempCtx,
+  //               canvasState.currentLine,
+  //               -imageItem.position.x - imageItem.bounds.minX,
+  //               -imageItem.position.y - imageItem.bounds.minY
+  //             );
+  //             tempCtx.restore();
+  //           }
+
+  //           // Create a new image from the merged canvas
+  //           const newImage = new Image();
+  //           newImage.src = tempCanvas.toDataURL();
+
+  //           // Automatically download the full-resolution image
+  //           // const link = document.createElement("a");
+  //           // link.download = "edited_image.png";
+  //           // link.href = newImage.src;
+  //           // document.body.appendChild(link);
+  //           // link.click();
+  //           // document.body.removeChild(link);
+
+  //           // Replace the old image item with the new merged image
+  //           const newImageItem: ImageItem = {
+  //             ...imageItem,
+  //             element: newImage,
+  //           };
+
+  //           const itemIndex = canvasState.items.findIndex(
+  //             (item) => item.id === imageItem.id
+  //           );
+  //           if (itemIndex !== -1) {
+  //             canvasState.items[itemIndex] = newImageItem;
+  //           }
+  //         }
+  //       }
+
+  //       canvasState.currentLine = null;
+  //       setIsDrawing(false);
+  //       updateCanvas(ctx, canvasState, draggedItem);
+  //     }
+  //   }
+  // }, [isDrawing, draggedItem]);
+
   const stopDrawing = useCallback(() => {
     if (isDrawing && canvasState.currentLine) {
-      const bounds = calculateBounds([canvasState.currentLine]);
-      const newItem: DrawingItem = {
-        id: `drawing-${Date.now()}`,
-        lines: [canvasState.currentLine],
-        position: { x: 0, y: 0 },
-        bounds: bounds,
-        type: "drawing",
-      };
-      canvasState.items.push(newItem);
-      canvasState.currentLine = null;
-      setIsDrawing(false);
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx) {
+        // Find the image item that the line was drawn on
+        const imageItem = canvasState.items.find(
+          (item) =>
+            item.type === "image" &&
+            canvasState.currentLine &&
+            canvasState.currentLine.points.some(
+              (point) =>
+                point.x >= item.position.x + item.bounds.minX &&
+                point.x <= item.position.x + item.bounds.maxX &&
+                point.y >= item.position.y + item.bounds.minY &&
+                point.y <= item.position.y + item.bounds.maxY
+            )
+        ) as ImageItem | undefined;
+
+        if (imageItem) {
+          // Create a temporary canvas to draw the merged image
+          const tempCanvas = document.createElement("canvas");
+          const tempCtx = tempCanvas.getContext("2d");
+          if (tempCtx) {
+            tempCanvas.width = imageItem.bounds.maxX - imageItem.bounds.minX;
+            tempCanvas.height = imageItem.bounds.maxY - imageItem.bounds.minY;
+
+            // Draw the original image
+            tempCtx.drawImage(
+              imageItem.element,
+              0,
+              0,
+              tempCanvas.width,
+              tempCanvas.height
+            );
+
+            // Draw the line on top of the image
+            if (canvasState.currentLine) {
+              drawLine(
+                tempCtx,
+                canvasState.currentLine,
+                -imageItem.position.x - imageItem.bounds.minX,
+                -imageItem.position.y - imageItem.bounds.minY
+              );
+            }
+
+            // Create a new image from the merged canvas
+            const newImage = new Image();
+            newImage.src = tempCanvas.toDataURL();
+
+            // Replace the old image item with the new merged image
+            const newImageItem: ImageItem = {
+              ...imageItem,
+              element: newImage,
+            };
+
+            const itemIndex = canvasState.items.findIndex(
+              (item) => item.id === imageItem.id
+            );
+            if (itemIndex !== -1) {
+              canvasState.items[itemIndex] = newImageItem;
+            }
+          }
+        }
+
+        canvasState.currentLine = null;
+        setIsDrawing(false);
         updateCanvas(ctx, canvasState, draggedItem);
       }
     }
-  }, [isDrawing, draggedItem, pan, scale]);
+  }, [isDrawing, draggedItem]);
 
   const startDragging = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -328,29 +479,6 @@ const Editor = () => {
     updateCanvas(ctx, canvasState, null);
   };
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const { x, y } = getCoordinates(e);
-      for (let i = canvasState.items.length - 1; i > -1; i--) {
-        const item = canvasState.items[i];
-        console.log("item", item);
-        if (
-          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
-          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
-          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
-          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
-        ) {
-          setSelectedItem(item.id);
-          setSelectedItemPosition({ x: e.clientX, y: e.clientY });
-          return;
-        }
-      }
-      setSelectedItem(null);
-      setSelectedItemPosition(null);
-    },
-    [getCoordinates]
-  );
-
   const moveItemToBack = useCallback(() => {
     if (selectedItem) {
       const itemIndex = canvasState.items.findIndex(
@@ -407,6 +535,8 @@ const Editor = () => {
             maxX: img.width,
             maxY: img.height,
           },
+          originalHeight: img.height,
+          originalWidth: img.width,
         };
         canvasState.items.push(newImageItem);
         const ctx = canvasRef.current?.getContext("2d");
@@ -418,6 +548,49 @@ const Editor = () => {
     };
     reader.readAsDataURL(file);
   };
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const { x, y } = getCoordinates(e);
+      for (let i = canvasState.items.length - 1; i > -1; i--) {
+        const item = canvasState.items[i];
+        console.log("item", item);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        ) {
+          setSelectedItem(item.id);
+          setSelectedItemPosition({ x: e.clientX, y: e.clientY });
+          setShowItemOptions(true);
+          return;
+        }
+      }
+    },
+    [getCoordinates]
+  );
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!drawingMode) {
+        startDragging(e);
+      } else {
+        const item = canvasState.items.find((item) => item.id === selectedItem);
+        if (!item) return;
+        const { x, y } = getCoordinates(e);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        )
+          startDrawing(e);
+      }
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    },
+    [drawingMode, startDragging, startDrawing]
+  );
 
   const handleWheel = useCallback(
     (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -440,25 +613,21 @@ const Editor = () => {
     [scale, pan]
   );
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!drawingMode) {
-        startDragging(e);
-      } else {
-        startDrawing(e);
-      }
-
-      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
-    },
-    [drawingMode, startDragging, startDrawing]
-  );
-
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!drawingMode && isDragging) {
         drag(e);
       } else if (drawingMode && isDrawing) {
-        draw(e);
+        const item = canvasState.items.find((item) => item.id === selectedItem);
+        if (!item) return;
+        const { x, y } = getCoordinates(e);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        )
+          draw(e);
       }
       handlePan(e);
     },
@@ -515,9 +684,12 @@ const Editor = () => {
         onWheel={handleWheel}
       />
       <div className="absolute top-[10px] left-1/2 transform -translate-x-1/2 z-10 flex gap-2.5">
-        <button onClick={toggleDrawingMode}>
-          {drawingMode ? "Stop Drawing" : "Draw"}
-        </button>
+        {showItemOptions && (
+          <button onClick={toggleDrawingMode}>
+            {drawingMode ? "Stop Drawing" : "Draw"}
+          </button>
+        )}
+
         <input
           type="color"
           value={color}
