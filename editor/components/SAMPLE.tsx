@@ -170,6 +170,7 @@ const Editor = () => {
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [scale, setScale] = useState<number>(1);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const [showItemOptions, setShowItemOptions] = useState<boolean>(false);
 
   const getCoordinates = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
@@ -199,7 +200,6 @@ const Editor = () => {
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       const { x, y } = getCoordinates(e);
-
       if (canvasState.currentLine) {
         canvasState.currentLine.points.push({ x, y });
         const ctx = canvasRef.current?.getContext("2d");
@@ -213,15 +213,15 @@ const Editor = () => {
 
   const stopDrawing = useCallback(() => {
     if (isDrawing && canvasState.currentLine) {
-      const bounds = calculateBounds([canvasState.currentLine]);
-      const newItem: DrawingItem = {
-        id: `drawing-${Date.now()}`,
-        lines: [canvasState.currentLine],
-        position: { x: 0, y: 0 },
-        bounds: bounds,
-        type: "drawing",
-      };
-      canvasState.items.push(newItem);
+      // const bounds = calculateBounds([canvasState.currentLine]);
+      // const newItem: DrawingItem = {
+      //   id: `drawing-${Date.now()}`,
+      //   lines: [canvasState.currentLine],
+      //   position: { x: 0, y: 0 },
+      //   bounds: bounds,
+      //   type: "drawing",
+      // };
+      // canvasState.items.push(newItem);
       canvasState.currentLine = null;
       setIsDrawing(false);
       const ctx = canvasRef.current?.getContext("2d");
@@ -314,29 +314,6 @@ const Editor = () => {
     updateCanvas(ctx, canvasState, null);
   };
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const { x, y } = getCoordinates(e);
-      for (let i = canvasState.items.length - 1; i > -1; i--) {
-        const item = canvasState.items[i];
-        console.log("item", item);
-        if (
-          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
-          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
-          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
-          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
-        ) {
-          setSelectedItem(item.id);
-          setSelectedItemPosition({ x: e.clientX, y: e.clientY });
-          return;
-        }
-      }
-      setSelectedItem(null);
-      setSelectedItemPosition(null);
-    },
-    [getCoordinates]
-  );
-
   const moveItemToBack = useCallback(() => {
     if (selectedItem) {
       const itemIndex = canvasState.items.findIndex(
@@ -405,6 +382,30 @@ const Editor = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const { x, y } = getCoordinates(e);
+      for (let i = canvasState.items.length - 1; i > -1; i--) {
+        const item = canvasState.items[i];
+        console.log("item", item);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        ) {
+          setSelectedItem(item.id);
+          setSelectedItemPosition({ x: e.clientX, y: e.clientY });
+          setShowItemOptions(true);
+          return;
+        }
+      }
+      setSelectedItem(null);
+      setSelectedItemPosition(null);
+    },
+    [getCoordinates]
+  );
+
   const handleWheel = useCallback(
     (e: React.WheelEvent<HTMLCanvasElement>) => {
       if (e.ctrlKey) {
@@ -431,9 +432,17 @@ const Editor = () => {
       if (!drawingMode) {
         startDragging(e);
       } else {
-        startDrawing(e);
+        const item = canvasState.items.find((item) => item.id === selectedItem);
+        if (!item) return;
+        const { x, y } = getCoordinates(e);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        )
+          startDrawing(e);
       }
-
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     },
     [drawingMode, startDragging, startDrawing]
@@ -444,7 +453,16 @@ const Editor = () => {
       if (!drawingMode && isDragging) {
         drag(e);
       } else if (drawingMode && isDrawing) {
-        draw(e);
+        const item = canvasState.items.find((item) => item.id === selectedItem);
+        if (!item) return;
+        const { x, y } = getCoordinates(e);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        )
+          draw(e);
       }
       handlePan(e);
     },
@@ -501,9 +519,12 @@ const Editor = () => {
         onWheel={handleWheel}
       />
       <div className="absolute top-[10px] left-1/2 transform -translate-x-1/2 z-10 flex gap-2.5">
-        <button onClick={toggleDrawingMode}>
-          {drawingMode ? "Stop Drawing" : "Draw"}
-        </button>
+        {showItemOptions && (
+          <button onClick={toggleDrawingMode}>
+            {drawingMode ? "Stop Drawing" : "Draw"}
+          </button>
+        )}
+
         <input
           type="color"
           value={color}
