@@ -1,10 +1,6 @@
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import TextCustomizer, {
-  drawText,
-  measureTextBounds,
-  TextData,
-} from "./TextCustomizer";
+import TextCustomizer, { measureTextBounds, TextData } from "./TextCustomizer";
 
 interface Point {
   x: number;
@@ -35,7 +31,7 @@ interface ImageItem extends BaseItem {
   element: HTMLImageElement;
 }
 
-interface TextItem extends BaseItem {
+export interface TextItem extends BaseItem {
   type: "text";
   textdata: TextData;
 }
@@ -100,6 +96,24 @@ const drawBorder = (
   }
 };
 
+const drawText = (ctx: CanvasRenderingContext2D, data: TextItem) => {
+  ctx.font = `${data.textdata.fontStyle} ${data.textdata.fontSize}px ${data.textdata.fontFamily}`;
+  ctx.fillStyle = data.textdata.fillStyle;
+  ctx.strokeStyle = data.textdata.strokeStyle;
+  ctx.lineWidth = data.textdata.lineWidth;
+  ctx.shadowColor = data.textdata.shadowColor;
+  ctx.shadowBlur = data.textdata.shadowBlur;
+  ctx.shadowOffsetX = data.textdata.shadowOffsetX;
+  ctx.shadowOffsetY = data.textdata.shadowOffsetY;
+  ctx.textAlign = data.textdata.textAlign;
+  ctx.textBaseline = data.textdata.textBaseline;
+
+  if (data.textdata.useStroke) {
+    ctx.strokeText(data.textdata.text, data.position.x, data.position.y);
+  }
+  ctx.fillText(data.textdata.text, data.position.x, data.position.y);
+};
+
 const updateCanvas = (
   ctx: CanvasRenderingContext2D,
   state: CanvasState,
@@ -117,7 +131,7 @@ const updateCanvas = (
       );
     else if (item.type === "image")
       ctx.drawImage(item.element, item.position.x, item.position.y);
-    else if (item.type === "text") drawText(ctx, item.textdata);
+    else if (item.type === "text") drawText(ctx, item);
 
     drawBorder(ctx, item);
     if (item.id === draggedItemId) drawBorder(ctx, item, "red");
@@ -133,7 +147,6 @@ const calculateBounds = (
   if (lines.length === 0 || lines[0].points.length === 0) {
     return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   }
-
   let minX = lines[0].points[0].x;
   let minY = lines[0].points[0].y;
   let maxX = lines[0].points[0].x;
@@ -265,6 +278,7 @@ const Editor = () => {
         (item) => item.id === draggedItem
       );
       if (itemIndex !== -1) {
+        console.log("new position", x - dragOffset.x, y - dragOffset.y);
         canvasState.items[itemIndex].position = {
           x: x - dragOffset.x,
           y: y - dragOffset.y,
@@ -297,8 +311,8 @@ const Editor = () => {
       type: "text",
       textdata: state,
       position: {
-        x,
-        y,
+        x: 10,
+        y: 10,
       },
       bounds: measureTextBounds(ctx, {
         text: state.text,
