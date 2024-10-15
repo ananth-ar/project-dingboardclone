@@ -38,20 +38,24 @@ export interface TextItem extends BaseItem {
   textdata: TextData;
 }
 
-type CanvasItem = DrawingItem | ImageItem | TextItem;
+type CanvasItem = ImageItem | TextItem;
 
 export interface CanvasState {
   items: CanvasItem[];
   currentLine: Line | null;
+  history: CanvasItem[][];
+  historyIndex: number;
 }
 
 const canvasState: CanvasState = {
   items: [],
   currentLine: null,
+  history: [],
+  historyIndex: -1,
 };
 
-const BORDER_WIDTH = 1;
-const BORDER_PADDING = 5;
+const BORDER_WIDTH = 0.5;
+const BORDER_PADDING = 1;
 
 const drawLine = (
   ctx: CanvasRenderingContext2D,
@@ -139,29 +143,6 @@ const updateCanvas = (
   }
 };
 
-const calculateBounds = (
-  lines: Line[]
-): { minX: number; minY: number; maxX: number; maxY: number } => {
-  if (lines.length === 0 || lines[0].points.length === 0) {
-    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-  }
-  let minX = lines[0].points[0].x;
-  let minY = lines[0].points[0].y;
-  let maxX = lines[0].points[0].x;
-  let maxY = lines[0].points[0].y;
-
-  lines.forEach((line) => {
-    line.points.forEach((point) => {
-      minX = Math.min(minX, point.x);
-      minY = Math.min(minY, point.y);
-      maxX = Math.max(maxX, point.x);
-      maxY = Math.max(maxY, point.y);
-    });
-  });
-
-  return { minX, minY, maxX, maxY };
-};
-
 const Editor = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [color, setColor] = useState<string>("#000000");
@@ -215,114 +196,14 @@ const Editor = () => {
         canvasState.currentLine.points.push({ x, y });
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem);
+          requestAnimationFrame(() =>
+            updateCanvas(ctx, canvasState, draggedItem)
+          );
         }
       }
     },
     [isDrawing, draggedItem, getCoordinates, pan, scale]
   );
-
-  // const stopDrawing = useCallback(() => {
-  //   if (isDrawing && canvasState.currentLine) {
-  //     canvasState.currentLine = null;
-  //     setIsDrawing(false);
-  //     const ctx = canvasRef.current?.getContext("2d");
-  //     if (ctx) {
-  //       updateCanvas(ctx, canvasState, draggedItem);
-  //     }
-  //   }
-  // }, [isDrawing, draggedItem, pan, scale]);
-
-  // const stopDrawing = useCallback(() => {
-  //   if (isDrawing && canvasState.currentLine) {
-  //     const ctx = canvasRef.current?.getContext("2d");
-  //     if (ctx) {
-  //       // Find the image item that the line was drawn on
-  //       const imageItem = canvasState.items.find(
-  //         (item) =>
-  //           item.type === "image" &&
-  //           canvasState.currentLine &&
-  //           canvasState.currentLine.points.some(
-  //             (point) =>
-  //               point.x >= item.position.x + item.bounds.minX &&
-  //               point.x <= item.position.x + item.bounds.maxX &&
-  //               point.y >= item.position.y + item.bounds.minY &&
-  //               point.y <= item.position.y + item.bounds.maxY
-  //           )
-  //       ) as ImageItem | undefined;
-
-  //       if (imageItem) {
-  //         // Create a temporary canvas to draw the merged image
-  //         const tempCanvas = document.createElement("canvas");
-  //         const tempCtx = tempCanvas.getContext("2d");
-  //         if (tempCtx) {
-  //           // Use the original dimensions of the image
-  //           tempCanvas.width = imageItem.originalWidth;
-  //           tempCanvas.height = imageItem.originalHeight;
-
-  //           // Draw the original image
-  //           tempCtx.drawImage(
-  //             imageItem.element,
-  //             0,
-  //             0,
-  //             tempCanvas.width,
-  //             tempCanvas.height
-  //           );
-
-  //           // Calculate the scale factor
-  //           const scaleX =
-  //             imageItem.originalWidth /
-  //             (imageItem.bounds.maxX - imageItem.bounds.minX);
-  //           const scaleY =
-  //             imageItem.originalHeight /
-  //             (imageItem.bounds.maxY - imageItem.bounds.minY);
-
-  //           // Draw the line on top of the image, adjusting for scale
-  //           if (canvasState.currentLine) {
-  //             tempCtx.save();
-  //             tempCtx.scale(scaleX, scaleY);
-  //             drawLine(
-  //               tempCtx,
-  //               canvasState.currentLine,
-  //               -imageItem.position.x - imageItem.bounds.minX,
-  //               -imageItem.position.y - imageItem.bounds.minY
-  //             );
-  //             tempCtx.restore();
-  //           }
-
-  //           // Create a new image from the merged canvas
-  //           const newImage = new Image();
-  //           newImage.src = tempCanvas.toDataURL();
-
-  //           // Automatically download the full-resolution image
-  //           // const link = document.createElement("a");
-  //           // link.download = "edited_image.png";
-  //           // link.href = newImage.src;
-  //           // document.body.appendChild(link);
-  //           // link.click();
-  //           // document.body.removeChild(link);
-
-  //           // Replace the old image item with the new merged image
-  //           const newImageItem: ImageItem = {
-  //             ...imageItem,
-  //             element: newImage,
-  //           };
-
-  //           const itemIndex = canvasState.items.findIndex(
-  //             (item) => item.id === imageItem.id
-  //           );
-  //           if (itemIndex !== -1) {
-  //             canvasState.items[itemIndex] = newImageItem;
-  //           }
-  //         }
-  //       }
-
-  //       canvasState.currentLine = null;
-  //       setIsDrawing(false);
-  //       updateCanvas(ctx, canvasState, draggedItem);
-  //     }
-  //   }
-  // }, [isDrawing, draggedItem]);
 
   const stopDrawing = useCallback(() => {
     if (isDrawing && canvasState.currentLine) {
@@ -330,67 +211,57 @@ const Editor = () => {
       if (ctx) {
         // Find the image item that the line was drawn on
         const imageItem = canvasState.items.find(
-          (item) =>
-            item.type === "image" &&
-            canvasState.currentLine &&
-            canvasState.currentLine.points.some(
-              (point) =>
-                point.x >= item.position.x + item.bounds.minX &&
-                point.x <= item.position.x + item.bounds.maxX &&
-                point.y >= item.position.y + item.bounds.minY &&
-                point.y <= item.position.y + item.bounds.maxY
-            )
-        ) as ImageItem | undefined;
+          (item) => item.id === selectedItem
+        );
+        if (!imageItem) return;
+        if (imageItem.type !== "image") return;
 
-        if (imageItem) {
-          // Create a temporary canvas to draw the merged image
-          const tempCanvas = document.createElement("canvas");
-          const tempCtx = tempCanvas.getContext("2d");
-          if (tempCtx) {
-            tempCanvas.width = imageItem.bounds.maxX - imageItem.bounds.minX;
-            tempCanvas.height = imageItem.bounds.maxY - imageItem.bounds.minY;
+        const tempCanvas = document.createElement("canvas");
+        const tempCtx = tempCanvas.getContext("2d");
+        if (tempCtx) {
+          tempCanvas.width = imageItem.bounds.maxX - imageItem.bounds.minX;
+          tempCanvas.height = imageItem.bounds.maxY - imageItem.bounds.minY;
 
-            // Draw the original image
-            tempCtx.drawImage(
-              imageItem.element,
-              0,
-              0,
-              tempCanvas.width,
-              tempCanvas.height
+          tempCtx.drawImage(
+            imageItem.element,
+            0,
+            0,
+            tempCanvas.width,
+            tempCanvas.height
+          );
+
+          if (canvasState.currentLine) {
+            drawLine(
+              tempCtx,
+              canvasState.currentLine,
+              -imageItem.position.x - imageItem.bounds.minX,
+              -imageItem.position.y - imageItem.bounds.minY
             );
+          }
 
-            // Draw the line on top of the image
-            if (canvasState.currentLine) {
-              drawLine(
-                tempCtx,
-                canvasState.currentLine,
-                -imageItem.position.x - imageItem.bounds.minX,
-                -imageItem.position.y - imageItem.bounds.minY
-              );
-            }
+          const newImage = new Image();
+          newImage.src = tempCanvas.toDataURL();
 
-            // Create a new image from the merged canvas
-            const newImage = new Image();
-            newImage.src = tempCanvas.toDataURL();
+          const newImageItem: ImageItem = {
+            ...imageItem,
+            element: newImage,
+          };
 
-            // Replace the old image item with the new merged image
-            const newImageItem: ImageItem = {
-              ...imageItem,
-              element: newImage,
-            };
-
-            const itemIndex = canvasState.items.findIndex(
-              (item) => item.id === imageItem.id
-            );
-            if (itemIndex !== -1) {
-              canvasState.items[itemIndex] = newImageItem;
-            }
+          const itemIndex = canvasState.items.findIndex(
+            (item) => item.id === imageItem.id
+          );
+          if (itemIndex !== -1) {
+            canvasState.items[itemIndex] = newImageItem;
           }
         }
 
         canvasState.currentLine = null;
         setIsDrawing(false);
-        updateCanvas(ctx, canvasState, draggedItem);
+        canvasState.history.push(canvasState.items);
+        canvasState.historyIndex++;
+        requestAnimationFrame(() =>
+          updateCanvas(ctx, canvasState, draggedItem)
+        );
       }
     }
   }, [isDrawing, draggedItem]);
@@ -429,14 +300,15 @@ const Editor = () => {
         (item) => item.id === draggedItem
       );
       if (itemIndex !== -1) {
-        console.log("new position", x - dragOffset.x, y - dragOffset.y);
         canvasState.items[itemIndex].position = {
           x: x - dragOffset.x,
           y: y - dragOffset.y,
         };
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem);
+          requestAnimationFrame(() =>
+            updateCanvas(ctx, canvasState, draggedItem)
+          );
         }
       }
     },
@@ -448,7 +320,7 @@ const Editor = () => {
     setDraggedItem(null);
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx) {
-      updateCanvas(ctx, canvasState, null);
+      requestAnimationFrame(() => updateCanvas(ctx, canvasState, null));
     }
   }, [pan, scale]);
 
@@ -476,7 +348,7 @@ const Editor = () => {
         textBaseline: state.textBaseline,
       }),
     });
-    updateCanvas(ctx, canvasState, null);
+    requestAnimationFrame(() => updateCanvas(ctx, canvasState, null));
   };
 
   const moveItemToBack = useCallback(() => {
@@ -490,7 +362,7 @@ const Editor = () => {
         setSelectedItem(null);
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, null);
+          requestAnimationFrame(() => updateCanvas(ctx, canvasState, null));
         }
       }
     }
@@ -541,7 +413,7 @@ const Editor = () => {
         canvasState.items.push(newImageItem);
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, null);
+          requestAnimationFrame(() => updateCanvas(ctx, canvasState, null));
         }
       };
       img.src = event.target?.result as string;
@@ -652,7 +524,9 @@ const Editor = () => {
       canvas.height = window.innerHeight;
       if (ctx) {
         ctx.setTransform(scale, 0, 0, scale, pan.x, pan.y);
-        updateCanvas(ctx, canvasState, draggedItem);
+        requestAnimationFrame(() =>
+          updateCanvas(ctx, canvasState, draggedItem)
+        );
       }
     };
 
@@ -689,7 +563,6 @@ const Editor = () => {
             {drawingMode ? "Stop Drawing" : "Draw"}
           </button>
         )}
-
         <input
           type="color"
           value={color}
