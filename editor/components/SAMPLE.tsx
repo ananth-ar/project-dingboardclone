@@ -31,7 +31,6 @@ interface ImageItem extends BaseItem {
   element: HTMLImageElement;
   originalHeight: number;
   originalWidth: number;
-  totest?: string;
 }
 
 export interface TextItem extends BaseItem {
@@ -48,12 +47,7 @@ export interface CanvasState {
   historyIndex: number;
 }
 
-// const canvasStateRef.current: CanvasState = {
-//   items: [],
-//   currentLine: null,
-//   history: [],
-//   historyIndex: 0,
-// };
+
 
 const BORDER_WIDTH = 0.5;
 const BORDER_PADDING = 1;
@@ -216,7 +210,6 @@ const Editor = () => {
     if (isDrawing && canvasStateRef.current.currentLine) {
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx) {
-        // Find the image item that the line was drawn on
         const imageItem = canvasStateRef.current.items.find(
           (item) => item.id === selectedItem
         );
@@ -252,34 +245,34 @@ const Editor = () => {
         const newImageItem: ImageItem = {
           ...imageItem,
           element: newImage,
-          totest: "image WITH LINE",
+      
         };
-
+ 
         const itemIndex = canvasStateRef.current.items.findIndex(
           (item) => item.id === imageItem.id
         );
 
         canvasStateRef.current.currentLine = null;
         console.log("before adding", canvasStateRef.current);
-        if (
-          canvasStateRef.current.historyIndex <
-          canvasStateRef.current.history.length
-        ) {
-          canvasStateRef.current.items = canvasStateRef.current.items.slice(
-            0,
-            -canvasStateRef.current.history.length -
-              canvasStateRef.current.historyIndex
-          );
-          console.log("inside remove", canvasStateRef.current.items);
-        }
+        // if (
+        //   canvasStateRef.current.historyIndex <
+        //   canvasStateRef.current.history.length
+        // ) {
+        //   canvasStateRef.current.items = canvasStateRef.current.items.slice(
+        //     0,
+        //     -canvasStateRef.current.history.length -
+        //       canvasStateRef.current.historyIndex
+        //   );
+        //   console.log("inside remove", canvasStateRef.current.items);
+        // }
         if (canvasStateRef.current.history.length < 1) {
-          console.log("pushing with noline ", canvasStateRef.current.items);
           canvasStateRef.current.history.push(canvasStateRef.current.items);
           canvasStateRef.current.historyIndex++;
+          console.log("pushing with noline ", canvasStateRef.current.items);
         }
-        if (itemIndex !== -1) {
+        if (itemIndex !== -1)
           canvasStateRef.current.items[itemIndex] = newImageItem;
-        }
+
         canvasStateRef.current.history.push(canvasStateRef.current.items);
         canvasStateRef.current.historyIndex++;
         console.log("after adding", canvasStateRef.current);
@@ -442,6 +435,7 @@ const Editor = () => {
           originalWidth: img.width,
         };
         canvasStateRef.current.items.push(newImageItem);
+        console.log("just added a image ", canvasStateRef.current.items);
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
           requestAnimationFrame(() =>
@@ -455,22 +449,21 @@ const Editor = () => {
   };
 
   const handleUndo = (num: 1 | -1) => {
-    canvasStateRef.current.historyIndex += num;
+    // canvasStateRef.current.historyIndex += num;
 
-    if (
-      canvasStateRef.current.historyIndex < 0 ||
-      canvasStateRef.current.historyIndex >=
-        canvasStateRef.current.history.length
-    )
-      return;
+    // if (
+    //   canvasStateRef.current.historyIndex < 0 ||
+    //   canvasStateRef.current.historyIndex >=
+    //     canvasStateRef.current.history.length
+    // )
+    //   return;
 
-    canvasStateRef.current.items =
-      canvasStateRef.current.history[canvasStateRef.current.historyIndex - 1];
-    console.log(
-      "after undo",
-      canvasStateRef.current.historyIndex - 1,
-      canvasStateRef.current
-    );
+    canvasStateRef.current.items = canvasStateRef.current.history[0];
+    // console.log(
+    //   "after undo",
+    //   canvasStateRef.current.historyIndex - 1,
+    //   canvasStateRef.current
+    // );
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx) {
       requestAnimationFrame(() =>
