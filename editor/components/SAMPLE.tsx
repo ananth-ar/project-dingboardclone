@@ -51,7 +51,7 @@ const canvasState: CanvasState = {
   items: [],
   currentLine: null,
   history: [],
-  historyIndex: -1,
+  historyIndex: 0,
 };
 
 const BORDER_WIDTH = 0.5;
@@ -218,47 +218,52 @@ const Editor = () => {
 
         const tempCanvas = document.createElement("canvas");
         const tempCtx = tempCanvas.getContext("2d");
-        if (tempCtx) {
-          tempCanvas.width = imageItem.bounds.maxX - imageItem.bounds.minX;
-          tempCanvas.height = imageItem.bounds.maxY - imageItem.bounds.minY;
+        if (!tempCtx) return;
+        tempCanvas.width = imageItem.bounds.maxX - imageItem.bounds.minX;
+        tempCanvas.height = imageItem.bounds.maxY - imageItem.bounds.minY;
 
-          tempCtx.drawImage(
-            imageItem.element,
-            0,
-            0,
-            tempCanvas.width,
-            tempCanvas.height
+        tempCtx.drawImage(
+          imageItem.element,
+          0,
+          0,
+          tempCanvas.width,
+          tempCanvas.height
+        );
+
+        if (canvasState.currentLine) {
+          drawLine(
+            tempCtx,
+            canvasState.currentLine,
+            -imageItem.position.x - imageItem.bounds.minX,
+            -imageItem.position.y - imageItem.bounds.minY
           );
-
-          if (canvasState.currentLine) {
-            drawLine(
-              tempCtx,
-              canvasState.currentLine,
-              -imageItem.position.x - imageItem.bounds.minX,
-              -imageItem.position.y - imageItem.bounds.minY
-            );
-          }
-
-          const newImage = new Image();
-          newImage.src = tempCanvas.toDataURL();
-
-          const newImageItem: ImageItem = {
-            ...imageItem,
-            element: newImage,
-          };
-
-          const itemIndex = canvasState.items.findIndex(
-            (item) => item.id === imageItem.id
-          );
-          if (itemIndex !== -1) {
-            canvasState.items[itemIndex] = newImageItem;
-          }
         }
 
+        const newImage = new Image();
+        newImage.src = tempCanvas.toDataURL();
+
+        const newImageItem: ImageItem = {
+          ...imageItem,
+          element: newImage,
+        };
+
+        const itemIndex = canvasState.items.findIndex(
+          (item) => item.id === imageItem.id
+        );
         canvasState.currentLine = null;
+        if (canvasState.historyIndex < 1) {
+          canvasState.history.push(canvasState.items);
+          canvasState.historyIndex++;
+        } else {
+          if (canvasState.historyIndex < canvasState.history.length){
+            
+          } 
+        }
+
+        if (itemIndex !== -1) {
+          canvasState.items[itemIndex] = newImageItem;
+        }
         setIsDrawing(false);
-        canvasState.history.push(canvasState.items);
-        canvasState.historyIndex++;
         requestAnimationFrame(() =>
           updateCanvas(ctx, canvasState, draggedItem)
         );
