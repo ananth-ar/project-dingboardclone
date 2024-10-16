@@ -250,16 +250,17 @@ const Editor = () => {
         const itemIndex = canvasState.items.findIndex(
           (item) => item.id === imageItem.id
         );
-        canvasState.currentLine = null;
-        if (canvasState.historyIndex < 1) {
-          canvasState.history.push(canvasState.items);
-          canvasState.historyIndex++;
-        } else {
-          if (canvasState.historyIndex < canvasState.history.length){
-            
-          } 
-        }
 
+        canvasState.currentLine = null;
+        if (canvasState.historyIndex < canvasState.history.length) {
+          canvasState.items = canvasState.items.slice(
+            0,
+            -canvasState.history.length - canvasState.historyIndex
+          );
+          console.log("items", canvasState.items);
+        }
+        canvasState.history.push(canvasState.items);
+        canvasState.historyIndex++;
         if (itemIndex !== -1) {
           canvasState.items[itemIndex] = newImageItem;
         }
@@ -426,6 +427,16 @@ const Editor = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleUndo = (num: 1 | -1) => {
+    canvasState.historyIndex += num;
+    if (canvasState.historyIndex < 0) return;
+    canvasState.items = canvasState.history[canvasState.historyIndex];
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) {
+      requestAnimationFrame(() => updateCanvas(ctx, canvasState, null));
+    }
+  };
+
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const { x, y } = getCoordinates(e);
@@ -589,6 +600,13 @@ const Editor = () => {
           className="hidden"
         />
         <TextCustomizer createText={createText} />
+        <div className="px-4">
+          <button className="px-1" onClick={() => {
+            canvasState.historyIndex--;
+            
+          }}>Undo</button>
+          <button className="px-1">Redo</button>
+        </div>
       </div>
       <div className="absolute bottom-4 right-4"></div>
       {selectedItem && selectedItemPosition && (
