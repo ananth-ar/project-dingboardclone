@@ -259,7 +259,9 @@ const Editor = () => {
         setIsDrawing(false);
         canvasState.history.push(canvasState.items);
         canvasState.historyIndex++;
-        requestAnimationFrame(() =>
+        requestAnimationFrame(() =>-
+
+          
           updateCanvas(ctx, canvasState, draggedItem)
         );
       }
