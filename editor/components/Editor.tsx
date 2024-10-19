@@ -1,10 +1,6 @@
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import TextCustomizer, {
-  drawText,
-  measureTextBounds,
-  TextData,
-} from "./TextCustomizer";
+import TextCustomizer, { measureTextBounds, TextData } from "./TextCustomizer";
 
 interface Point {
   x: number;
@@ -33,27 +29,26 @@ interface DrawingItem extends BaseItem {
 interface ImageItem extends BaseItem {
   type: "image";
   element: HTMLImageElement;
+  originalHeight: number;
+  originalWidth: number;
 }
 
-interface TextItem extends BaseItem {
+export interface TextItem extends BaseItem {
   type: "text";
   textdata: TextData;
 }
 
-type CanvasItem = DrawingItem | ImageItem | TextItem;
+type CanvasItem = ImageItem | TextItem;
 
 export interface CanvasState {
   items: CanvasItem[];
   currentLine: Line | null;
+  history: CanvasItem[][];
+  historyIndex: number;
 }
 
-const canvasState: CanvasState = {
-  items: [],
-  currentLine: null,
-};
-
-const BORDER_WIDTH = 1;
-const BORDER_PADDING = 5;
+const BORDER_WIDTH = 0.5;
+const BORDER_PADDING = 1;
 
 const drawLine = (
   ctx: CanvasRenderingContext2D,
@@ -100,6 +95,24 @@ const drawBorder = (
   }
 };
 
+const drawText = (ctx: CanvasRenderingContext2D, data: TextItem) => {
+  ctx.font = `${data.textdata.fontStyle} ${data.textdata.fontSize}px ${data.textdata.fontFamily}`;
+  ctx.fillStyle = data.textdata.fillStyle;
+  ctx.strokeStyle = data.textdata.strokeStyle;
+  ctx.lineWidth = data.textdata.lineWidth;
+  ctx.shadowColor = data.textdata.shadowColor;
+  ctx.shadowBlur = data.textdata.shadowBlur;
+  ctx.shadowOffsetX = data.textdata.shadowOffsetX;
+  ctx.shadowOffsetY = data.textdata.shadowOffsetY;
+  ctx.textAlign = data.textdata.textAlign;
+  ctx.textBaseline = data.textdata.textBaseline;
+
+  if (data.textdata.useStroke) {
+    ctx.strokeText(data.textdata.text, data.position.x, data.position.y);
+  }
+  ctx.fillText(data.textdata.text, data.position.x, data.position.y);
+};
+
 const updateCanvas = (
   ctx: CanvasRenderingContext2D,
   state: CanvasState,
@@ -111,13 +124,9 @@ const updateCanvas = (
   ctx.restore();
 
   state.items.forEach((item) => {
-    if (item.type === "drawing")
-      item.lines.forEach((line) =>
-        drawLine(ctx, line, item.position.x, item.position.y)
-      );
-    else if (item.type === "image")
+    if (item.type === "image")
       ctx.drawImage(item.element, item.position.x, item.position.y);
-    else if (item.type === "text") drawText(ctx, item.textdata);
+    else if (item.type === "text") drawText(ctx, item);
 
     drawBorder(ctx, item);
     if (item.id === draggedItemId) drawBorder(ctx, item, "red");
@@ -127,32 +136,14 @@ const updateCanvas = (
   }
 };
 
-const calculateBounds = (
-  lines: Line[]
-): { minX: number; minY: number; maxX: number; maxY: number } => {
-  if (lines.length === 0 || lines[0].points.length === 0) {
-    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-  }
-
-  let minX = lines[0].points[0].x;
-  let minY = lines[0].points[0].y;
-  let maxX = lines[0].points[0].x;
-  let maxY = lines[0].points[0].y;
-
-  lines.forEach((line) => {
-    line.points.forEach((point) => {
-      minX = Math.min(minX, point.x);
-      minY = Math.min(minY, point.y);
-      maxX = Math.max(maxX, point.x);
-      maxY = Math.max(maxY, point.y);
-    });
-  });
-
-  return { minX, minY, maxX, maxY };
-};
-
 const Editor = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasStateRef = useRef<CanvasState>({
+    items: [],
+    currentLine: null,
+    history: [],
+    historyIndex: 0,
+  });
   const [color, setColor] = useState<string>("#000000");
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -170,6 +161,7 @@ const Editor = () => {
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [scale, setScale] = useState<number>(1);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const [showItemOptions, setShowItemOptions] = useState<boolean>(false);
 
   const getCoordinates = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
@@ -189,7 +181,7 @@ const Editor = () => {
   const startDrawing = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const { x, y } = getCoordinates(e);
-      canvasState.currentLine = { points: [{ x, y }], color };
+      canvasStateRef.current.currentLine = { points: [{ x, y }], color };
       setIsDrawing(true);
     },
     [color, getCoordinates]
@@ -199,12 +191,13 @@ const Editor = () => {
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       const { x, y } = getCoordinates(e);
-
-      if (canvasState.currentLine) {
-        canvasState.currentLine.points.push({ x, y });
+      if (canvasStateRef.current.currentLine) {
+        canvasStateRef.current.currentLine.points.push({ x, y });
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem);
+          requestAnimationFrame(() =>
+            updateCanvas(ctx, canvasStateRef.current, draggedItem)
+          );
         }
       }
     },
@@ -212,30 +205,87 @@ const Editor = () => {
   );
 
   const stopDrawing = useCallback(() => {
-    if (isDrawing && canvasState.currentLine) {
-      const bounds = calculateBounds([canvasState.currentLine]);
-      const newItem: DrawingItem = {
-        id: `drawing-${Date.now()}`,
-        lines: [canvasState.currentLine],
-        position: { x: 0, y: 0 },
-        bounds: bounds,
-        type: "drawing",
-      };
-      canvasState.items.push(newItem);
-      canvasState.currentLine = null;
-      setIsDrawing(false);
+    if (isDrawing && canvasStateRef.current.currentLine) {
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx) {
-        updateCanvas(ctx, canvasState, draggedItem);
+        const imageItem = canvasStateRef.current.items.find(
+          (item) => item.id === selectedItem
+        );
+        if (!imageItem) return;
+        if (imageItem.type !== "image") return;
+
+        const tempCanvas = document.createElement("canvas");
+        const tempCtx = tempCanvas.getContext("2d");
+        if (!tempCtx) return;
+        tempCanvas.width = imageItem.bounds.maxX - imageItem.bounds.minX;
+        tempCanvas.height = imageItem.bounds.maxY - imageItem.bounds.minY;
+
+        tempCtx.drawImage(
+          imageItem.element,
+          0,
+          0,
+          tempCanvas.width,
+          tempCanvas.height
+        );
+
+        if (canvasStateRef.current.currentLine) {
+          drawLine(
+            tempCtx,
+            canvasStateRef.current.currentLine,
+            -imageItem.position.x - imageItem.bounds.minX,
+            -imageItem.position.y - imageItem.bounds.minY
+          );
+        }
+
+        const newImage = new Image();
+        newImage.src = tempCanvas.toDataURL();
+
+        const newImageItem: ImageItem = {
+          ...imageItem,
+          element: newImage,
+        };
+
+        const itemIndex = canvasStateRef.current.items.findIndex(
+          (item) => item.id === imageItem.id
+        );
+
+        canvasStateRef.current.currentLine = null;
+        console.log("before adding", canvasStateRef.current);
+        // if (
+        //   canvasStateRef.current.historyIndex <
+        //   canvasStateRef.current.history.length
+        // ) {
+        //   canvasStateRef.current.items = canvasStateRef.current.items.slice(
+        //     0,
+        //     -canvasStateRef.current.history.length -
+        //       canvasStateRef.current.historyIndex
+        //   );
+        //   console.log("inside remove", canvasStateRef.current.items);
+        // }
+        if (canvasStateRef.current.history.length < 1) {
+          canvasStateRef.current.history.push(canvasStateRef.current.items);
+          canvasStateRef.current.historyIndex++;
+          console.log("pushing with noline ", canvasStateRef.current.items);
+        }
+        if (itemIndex !== -1)
+          canvasStateRef.current.items[itemIndex] = newImageItem;
+
+        canvasStateRef.current.history.push(canvasStateRef.current.items);
+        canvasStateRef.current.historyIndex++;
+        console.log("after adding", canvasStateRef.current);
+        setIsDrawing(false);
+        requestAnimationFrame(() =>
+          updateCanvas(ctx, canvasStateRef.current, draggedItem)
+        );
       }
     }
-  }, [isDrawing, draggedItem, pan, scale]);
+  }, [isDrawing, draggedItem]);
 
   const startDragging = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const { x, y } = getCoordinates(e);
-      for (let i = canvasState.items.length - 1; i >= 0; i--) {
-        const item = canvasState.items[i];
+      for (let i = canvasStateRef.current.items.length - 1; i >= 0; i--) {
+        const item = canvasStateRef.current.items[i];
         if (
           x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
           x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
@@ -261,17 +311,19 @@ const Editor = () => {
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDragging || !draggedItem) return;
       const { x, y } = getCoordinates(e);
-      const itemIndex = canvasState.items.findIndex(
+      const itemIndex = canvasStateRef.current.items.findIndex(
         (item) => item.id === draggedItem
       );
       if (itemIndex !== -1) {
-        canvasState.items[itemIndex].position = {
+        canvasStateRef.current.items[itemIndex].position = {
           x: x - dragOffset.x,
           y: y - dragOffset.y,
         };
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, draggedItem);
+          requestAnimationFrame(() =>
+            updateCanvas(ctx, canvasStateRef.current, draggedItem)
+          );
         }
       }
     },
@@ -283,7 +335,9 @@ const Editor = () => {
     setDraggedItem(null);
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx) {
-      updateCanvas(ctx, canvasState, null);
+      requestAnimationFrame(() =>
+        updateCanvas(ctx, canvasStateRef.current, null)
+      );
     }
   }, [pan, scale]);
 
@@ -292,13 +346,13 @@ const Editor = () => {
     if (!ctx) return;
     const x = Math.random() * (1000 - 100);
     const y = Math.random() * (1000 - 100);
-    canvasState.items.push({
+    canvasStateRef.current.items.push({
       id: `text-${Date.now()}`,
       type: "text",
       textdata: state,
       position: {
-        x,
-        y,
+        x: 10,
+        y: 10,
       },
       bounds: measureTextBounds(ctx, {
         text: state.text,
@@ -311,44 +365,25 @@ const Editor = () => {
         textBaseline: state.textBaseline,
       }),
     });
-    updateCanvas(ctx, canvasState, null);
+    requestAnimationFrame(() =>
+      updateCanvas(ctx, canvasStateRef.current, null)
+    );
   };
-
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const { x, y } = getCoordinates(e);
-      for (let i = canvasState.items.length - 1; i > -1; i--) {
-        const item = canvasState.items[i];
-        console.log("item", item);
-        if (
-          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
-          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
-          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
-          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
-        ) {
-          setSelectedItem(item.id);
-          setSelectedItemPosition({ x: e.clientX, y: e.clientY });
-          return;
-        }
-      }
-      setSelectedItem(null);
-      setSelectedItemPosition(null);
-    },
-    [getCoordinates]
-  );
 
   const moveItemToBack = useCallback(() => {
     if (selectedItem) {
-      const itemIndex = canvasState.items.findIndex(
+      const itemIndex = canvasStateRef.current.items.findIndex(
         (item) => item.id === selectedItem
       );
       if (itemIndex !== -1) {
-        const [item] = canvasState.items.splice(itemIndex, 1);
-        canvasState.items.unshift(item);
+        const [item] = canvasStateRef.current.items.splice(itemIndex, 1);
+        canvasStateRef.current.items.unshift(item);
         setSelectedItem(null);
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, null);
+          requestAnimationFrame(() =>
+            updateCanvas(ctx, canvasStateRef.current, null)
+          );
         }
       }
     }
@@ -393,17 +428,90 @@ const Editor = () => {
             maxX: img.width,
             maxY: img.height,
           },
+          originalHeight: img.height,
+          originalWidth: img.width,
         };
-        canvasState.items.push(newImageItem);
+        canvasStateRef.current.items.push(newImageItem);
+        console.log("just added a image ", canvasStateRef.current.items);
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) {
-          updateCanvas(ctx, canvasState, null);
+          requestAnimationFrame(() =>
+            updateCanvas(ctx, canvasStateRef.current, null)
+          );
         }
       };
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
   };
+
+  const handleUndo = (num: 1 | -1) => {
+    // canvasStateRef.current.historyIndex += num;
+
+    // if (
+    //   canvasStateRef.current.historyIndex < 0 ||
+    //   canvasStateRef.current.historyIndex >=
+    //     canvasStateRef.current.history.length
+    // )
+    //   return;
+
+    canvasStateRef.current.items = canvasStateRef.current.history[0];
+    // console.log(
+    //   "after undo",
+    //   canvasStateRef.current.historyIndex - 1,
+    //   canvasStateRef.current
+    // );
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) {
+      requestAnimationFrame(() =>
+        updateCanvas(ctx, canvasStateRef.current, null)
+      );
+    }
+  };
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const { x, y } = getCoordinates(e);
+      for (let i = canvasStateRef.current.items.length - 1; i > -1; i--) {
+        const item = canvasStateRef.current.items[i];
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        ) {
+          setSelectedItem(item.id);
+          setSelectedItemPosition({ x: e.clientX, y: e.clientY });
+          setShowItemOptions(true);
+          return;
+        }
+      }
+    },
+    [getCoordinates]
+  );
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!drawingMode) {
+        startDragging(e);
+      } else {
+        const item = canvasStateRef.current.items.find(
+          (item) => item.id === selectedItem
+        );
+        if (!item) return;
+        const { x, y } = getCoordinates(e);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        )
+          startDrawing(e);
+      }
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    },
+    [drawingMode, startDragging, startDrawing]
+  );
 
   const handleWheel = useCallback(
     (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -426,25 +534,23 @@ const Editor = () => {
     [scale, pan]
   );
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!drawingMode) {
-        startDragging(e);
-      } else {
-        startDrawing(e);
-      }
-
-      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
-    },
-    [drawingMode, startDragging, startDrawing]
-  );
-
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!drawingMode && isDragging) {
         drag(e);
       } else if (drawingMode && isDrawing) {
-        draw(e);
+        const item = canvasStateRef.current.items.find(
+          (item) => item.id === selectedItem
+        );
+        if (!item) return;
+        const { x, y } = getCoordinates(e);
+        if (
+          x >= item.position.x + item.bounds.minX - BORDER_PADDING &&
+          x <= item.position.x + item.bounds.maxX + BORDER_PADDING &&
+          y >= item.position.y + item.bounds.minY - BORDER_PADDING &&
+          y <= item.position.y + item.bounds.maxY + BORDER_PADDING
+        )
+          draw(e);
       }
       handlePan(e);
     },
@@ -469,7 +575,9 @@ const Editor = () => {
       canvas.height = window.innerHeight;
       if (ctx) {
         ctx.setTransform(scale, 0, 0, scale, pan.x, pan.y);
-        updateCanvas(ctx, canvasState, draggedItem);
+        requestAnimationFrame(() =>
+          updateCanvas(ctx, canvasStateRef.current, draggedItem)
+        );
       }
     };
 
@@ -501,9 +609,11 @@ const Editor = () => {
         onWheel={handleWheel}
       />
       <div className="absolute top-[10px] left-1/2 transform -translate-x-1/2 z-10 flex gap-2.5">
-        <button onClick={toggleDrawingMode}>
-          {drawingMode ? "Stop Drawing" : "Draw"}
-        </button>
+        {showItemOptions && (
+          <button onClick={toggleDrawingMode}>
+            {drawingMode ? "Stop Drawing" : "Draw"}
+          </button>
+        )}
         <input
           type="color"
           value={color}
@@ -525,6 +635,25 @@ const Editor = () => {
           className="hidden"
         />
         <TextCustomizer createText={createText} />
+        <div className="mx-4">
+          <button
+            className="px-1 mx-1 bg-indigo-600 text-white disabled:bg-indigo-800"
+            onClick={() => handleUndo(-1)}
+            disabled={canvasStateRef.current.historyIndex === 0}
+          >
+            Undo
+          </button>
+          <button
+            className="px-1 mx-1 bg-indigo-600 text-white disabled:bg-indigo-950"
+            onClick={() => handleUndo(1)}
+            disabled={
+              canvasStateRef.current.historyIndex ===
+              canvasStateRef.current.history.length - 1
+            }
+          >
+            Redo
+          </button>
+        </div>
       </div>
       <div className="absolute bottom-4 right-4"></div>
       {selectedItem && selectedItemPosition && (
