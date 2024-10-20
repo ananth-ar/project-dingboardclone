@@ -1,59 +1,70 @@
 "use client";
-import React, { use, useEffect } from "react";
 
-const InfiniteCanvas = () => {
-  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+import { useRef, useEffect, useState } from "react";
+import { Application, Assets, Sprite } from "pixi.js";
+
+const PixiComponent = () => {
+  const ref = useRef<any>(null);
+  const [rotation, setRotation] = useState<number>(0.1);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!ref.current) return;
+    (async () => {
+      ref.current = new Application();
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+      await ref.current.init({ background: "#1099bb", resizeTo: window });
+      document.body.appendChild(ref.current.view);
+      const texture = await Assets.load("https://pixijs.com/assets/bunny.png");
 
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // ctx.fillStyle = "#FF0000";
-      // ctx.fillRect(50, 10, 90, 90);
+      const bunny = new Sprite(texture);
 
-      // ctx.save();
-      // ctx.translate(90, 50);
-      // ctx.fillStyle = "#000000";
-      // ctx.fillRect(50, 10, 100, 100);
-      // ctx.restore();
+      ref.current.stage.addChild(bunny);
 
-      // Start a path
-      ctx.beginPath();
-      ctx.moveTo(50, 50);  
-      ctx.lineTo(100, 100);
+      bunny.anchor.set(0.5);
 
-      ctx.save(); // Save the current state
-      ctx.strokeStyle = "red"; // Change some properties
-      ctx.lineWidth = 5;
-      ctx.lineTo(150, 50); // Add to the path
-      ctx.stroke(); // Stroke the path
-      ctx.restore(); // Restore the saved state
+      bunny.x = ref.current.screen.width / 2;
+      bunny.y = ref.current.screen.height / 2;
+      ref.current.ticker.add((time) => {
+        bunny.rotation += 0.1 * time.deltaTime;
+      });
+    })();
 
-      // The path still exists, but we're back to default styles
-      ctx.lineTo(200, 100);
-      ctx.stroke();
-
-      console.log("draw");
-    };
-
-    draw();
+    return () => {};
   }, []);
 
+  useEffect(() => {
+    if (ref.current) {
+      (async () => {
+        const texture = await Assets.load(
+          "https://pixijs.com/assets/bunny.png"
+        );
+
+        const bunny = new Sprite(texture);
+
+        ref.current.stage.addChild(bunny);
+
+        bunny.anchor.set(0.5);
+
+        bunny.x = ref.current.screen.width / 2;
+        bunny.y = ref.current.screen.height / 2;
+        ref.current.ticker.add((time) => {
+          bunny.rotation += rotation * time.deltaTime;
+        });
+      })();
+    }
+  }, [rotation]);
+
   return (
-    <div>
-      <canvas
-        style={{ border: "1px solid black" }}
-        height={800}
-        width={1000}
-        ref={canvasRef}
-      />
-    </div>
+    <>
+      <button onClick={() => setRotation((prev) => prev + 0.1)}>
+        increment
+      </button>
+      <button onClick={() => setRotation((prev) => prev - 0.1)}>
+        decrement
+      </button>
+      <div ref={ref} />
+    </>
   );
 };
 
-export default InfiniteCanvas;
+export default PixiComponent;
