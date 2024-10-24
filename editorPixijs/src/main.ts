@@ -1,9 +1,13 @@
 // main.ts
+import { Application } from "pixi.js";
 import { FPSMeter, FPSChart } from "./fps";
 import "./style.css";
-import { Application } from "pixi.js";
+import { InfiniteCanvas } from "./infinitecanvas";
+
+
 
 async function initializeApp() {
+
   try {
     const app = new Application();
 
@@ -20,9 +24,29 @@ async function initializeApp() {
 
     appContainer.appendChild(app.canvas);
 
+    // Create and add the infinite canvas
+    const canvas = new InfiniteCanvas();
+    app.stage.addChild(canvas);
+
+    // Setup window resize handler
     window.addEventListener("resize", () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
     });
+
+    // Setup image upload
+    setupImageUpload(canvas);
+
+    // Initialize FPS monitoring system
+    const fpsMeter = new FPSMeter();
+    const fpsChart = new FPSChart();
+    app.stage.addChild(fpsChart.graphics);
+
+    // Start the FPS monitoring
+    app.ticker.add(() => {
+      const currentFPS = fpsMeter.measure();
+      fpsChart.update(currentFPS);
+    });
+    
 
     return app;
   } catch (error) {
@@ -31,18 +55,30 @@ async function initializeApp() {
   }
 }
 
+function setupImageUpload(canvas: InfiniteCanvas) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.style.position = "fixed";
+  input.style.top = "10px";
+  input.style.left = "10px";
 
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file) {
+      try {
+        await canvas.addImageFromFile(file);
+      } catch (error) {
+        console.error("Error adding image:", error);
+        // Here you could add user feedback for errors
+      }
+    }
+  };
+
+  document.body.appendChild(input);
+}
+
+// Initialize the application
 const appInstance = await initializeApp();
-
-// Initialize FPS monitoring system
-const fpsMeter = new FPSMeter();
-const fpsChart = new FPSChart();
-appInstance.stage.addChild(fpsChart.graphics);
-// Start the FPS monitoring
-appInstance.ticker.add(() => {
-  const currentFPS = fpsMeter.measure();
-  fpsChart.update(currentFPS);
-});
-
 
 export { appInstance as app };
