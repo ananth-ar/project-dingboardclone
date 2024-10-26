@@ -1,13 +1,16 @@
 // src/Item.ts
 import { Container, Sprite, Texture } from "pixi.js";
+import { MoveCommand, History } from "./commends";
+
 
 export class Item extends Container {
   private sprite: Sprite;
   private isDragging: boolean = false;
   private dragData: any = null;
   private dragStartPos: { x: number; y: number } | null = null;
+  private dragStartPosition: { x: number; y: number } | null = null;
 
-  constructor(texture: Texture) {
+  constructor(texture: Texture, private history: History) {
     super();
 
     if (!texture || !texture.isTexture) {
@@ -17,11 +20,9 @@ export class Item extends Container {
     this.sprite = new Sprite(texture);
     this.addChild(this.sprite);
 
-    // Enable interactivity
     this.eventMode = "static";
     this.cursor = "pointer";
 
-    // Set up drag events
     this.on("pointerdown", this.onDragStart)
       .on("globalpointermove", this.onDragMove)
       .on("pointerup", this.onDragEnd)
@@ -39,7 +40,12 @@ export class Item extends Container {
       y: this.dragData.global.y - this.y,
     };
 
-    // Optional: Bring to front
+    // Store the initial position of the item
+    this.dragStartPosition = {
+      x: this.x,
+      y: this.y,
+    };
+
     if (this.parent) {
       this.parent.addChild(this);
     }
@@ -48,16 +54,30 @@ export class Item extends Container {
   private onDragMove = (event: any): void => {
     if (this.isDragging && this.dragStartPos) {
       const newPosition = event.global;
-
-      // Update position maintaining the initial grab offset
       this.x = newPosition.x - this.dragStartPos.x;
       this.y = newPosition.y - this.dragStartPos.y;
     }
   };
 
   private onDragEnd = (): void => {
+    if (this.isDragging && this.dragStartPosition) {
+      // Only create a command if the position actually changed
+      if (
+        this.dragStartPosition.x !== this.x ||
+        this.dragStartPosition.y !== this.y
+      ) {
+        const moveCommand = new MoveCommand(this, this.dragStartPosition, {
+          x: this.x,
+          y: this.y,
+        });
+        this.history.execute(moveCommand);
+      }
+    }
+
     this.isDragging = false;
     this.dragData = null;
     this.dragStartPos = null;
+    this.dragStartPosition = null;
   };
 }
+

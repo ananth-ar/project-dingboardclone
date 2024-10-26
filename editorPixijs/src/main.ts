@@ -5,7 +5,6 @@ import "./style.css";
 import { InfiniteCanvas } from "./infinitecanvas";
 
 
-
 async function initializeApp() {
 
   try {

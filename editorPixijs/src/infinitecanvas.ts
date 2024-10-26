@@ -1,6 +1,7 @@
 // src/InfiniteCanvas.ts
 import { Container, Assets } from "pixi.js";
 import { Item } from "./item";
+import { History } from "./commends";
 
 export class InfiniteCanvas extends Container {
   private minZoom = 0.1;
@@ -8,13 +9,17 @@ export class InfiniteCanvas extends Container {
   private currentZoom = 1;
   private isPanning: boolean = false;
   private lastPanPosition: { x: number; y: number } | null = null;
+  private history: History;
 
   constructor() {
     super();
     this.eventMode = "static";
-    this.setupZoom();
+    this.history = new History();
     this.setupPan();
+    this.setupZoom();
+    this.setupKeyboardShortcuts();
   }
+
   private setupPan(): void {
     // Setup panning with middle mouse button
     window.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -106,9 +111,6 @@ export class InfiniteCanvas extends Container {
             // Convert screen coordinates to world coordinates before zoom
             const worldPos = this.toLocal({ x: cursorX, y: cursorY });
 
-            // Calculate zoom change factor
-            const zoomChange = clampedZoom / this.currentZoom;
-
             // Update container scale
             this.scale.set(clampedZoom);
 
@@ -151,7 +153,7 @@ export class InfiniteCanvas extends Container {
         const texture = await Assets.load(dataUrl);
 
         // Create and add the item
-        const item = new Item(texture);
+        const item = new Item(texture, this.history);
         this.addChild(item);
 
         // Position the item at the center of the screen
@@ -172,12 +174,31 @@ export class InfiniteCanvas extends Container {
   async addImage(imageUrl: string): Promise<Item> {
     try {
       const texture = await Assets.load(imageUrl);
-      const item = new Item(texture);
+      const item = new Item(texture, this.history);
       this.addChild(item);
       return item;
     } catch (error) {
       console.error("Failed to load image:", error);
       throw error;
     }
+  }
+
+  private setupKeyboardShortcuts(): void {
+    window.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Ctrl + Shift + Z = Redo
+          this.history.redo();
+        } else {
+          // Ctrl + Z = Undo
+          this.history.undo();
+        }
+      } else if (e.ctrlKey && e.key === "y") {
+        e.preventDefault();
+        // Ctrl + Y = Redo
+        this.history.redo();
+      }
+    });
   }
 }
