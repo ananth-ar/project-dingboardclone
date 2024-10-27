@@ -1,7 +1,8 @@
-// src/InfiniteCanvas.ts
+// src/infinitecanvas.ts
 import { Container, Assets } from "pixi.js";
 import { Item } from "./item";
-import { History } from "./commends";
+import { History, ImageUploadCommand } from "./commends";
+import { SelectionManager } from "./selectionManger";
 
 export class InfiniteCanvas extends Container {
   private minZoom = 0.1;
@@ -10,14 +11,27 @@ export class InfiniteCanvas extends Container {
   private isPanning: boolean = false;
   private lastPanPosition: { x: number; y: number } | null = null;
   private history: History;
+  private selectionManager: SelectionManager;
 
   constructor() {
     super();
+    this.selectionManager = new SelectionManager(this);
     this.eventMode = "static";
-    this.history = new History();
+    this.history = new History(this.selectionManager);
     this.setupPan();
     this.setupZoom();
     this.setupKeyboardShortcuts();
+    this.sortableChildren = true; // Enable z-index sorting
+    this.hitArea = {
+      contains: () => true,
+    };
+
+    this.on("click", (event: any) => {
+      // Only clear if the click was directly on the canvas
+      if (event.target === this) {
+        this.selectionManager.clearSelection();
+      }
+    });
   }
 
   private setupPan(): void {
@@ -122,6 +136,7 @@ export class InfiniteCanvas extends Container {
             this.position.y += cursorY - newScreenPos.y;
 
             this.currentZoom = clampedZoom;
+            this.selectionManager.onCanvasZoomChange(this.currentZoom);
           }
         }
       },
@@ -131,7 +146,6 @@ export class InfiniteCanvas extends Container {
 
   async addImageFromFile(file: File): Promise<Item> {
     try {
-      // Create a Promise that resolves with the image data
       const imageLoadPromise = new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -146,19 +160,22 @@ export class InfiniteCanvas extends Container {
       });
 
       try {
-        // Get the data URL
         const dataUrl = await imageLoadPromise;
+        // Add timestamp to make URL unique
+        const uniqueUrl = `${dataUrl}#${Date.now()}`;
 
-        // Create a texture using Assets.load
-        const texture = await Assets.load(dataUrl);
+        // Load with unique URL
+        const texture = await Assets.load(uniqueUrl);
 
-        // Create and add the item
-        const item = new Item(texture, this.history);
+        const item = new Item(texture, this.history, this.selectionManager);
         this.addChild(item);
-
-        // Position the item at the center of the screen
         item.x = window.innerWidth / 2;
         item.y = window.innerHeight / 2;
+    
+
+        // Add the command to history
+        const uploadCommand = new ImageUploadCommand(this, item);
+        this.history.execute(uploadCommand);
 
         return item;
       } catch (error) {
@@ -174,7 +191,7 @@ export class InfiniteCanvas extends Container {
   async addImage(imageUrl: string): Promise<Item> {
     try {
       const texture = await Assets.load(imageUrl);
-      const item = new Item(texture, this.history);
+      const item = new Item(texture, this.history, this.selectionManager);
       this.addChild(item);
       return item;
     } catch (error) {
@@ -183,20 +200,29 @@ export class InfiniteCanvas extends Container {
     }
   }
 
+  getSelectedItem(): Item | null {
+    return this.selectionManager.getSelectedItem();
+  }
+
+  get gethistory(): History {
+    return this.history;
+  }
+
   private setupKeyboardShortcuts(): void {
     window.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === "z") {
+      // Check for Ctrl + Shift + Z first (order matters!)
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (e.shiftKey) {
-          // Ctrl + Shift + Z = Redo
-          this.history.redo();
-        } else {
-          // Ctrl + Z = Undo
-          this.history.undo();
-        }
-      } else if (e.ctrlKey && e.key === "y") {
+        this.history.redo();
+      }
+      // Then check for just Ctrl + Z
+      else if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        // Ctrl + Y = Redo
+        this.history.undo();
+      }
+      // Finally check for Ctrl + Y
+      else if (e.ctrlKey && e.key.toLowerCase() === "y") {
+        e.preventDefault();
         this.history.redo();
       }
     });

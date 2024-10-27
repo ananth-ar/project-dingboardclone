@@ -1,9 +1,8 @@
-// main.ts
+// src/main.ts
 import { Application } from "pixi.js";
 import { FPSMeter, FPSChart } from "./fps";
 import "./style.css";
 import { InfiniteCanvas } from "./infinitecanvas";
-
 
 async function initializeApp() {
 
@@ -67,6 +66,8 @@ function setupImageUpload(canvas: InfiniteCanvas) {
     if (file) {
       try {
         await canvas.addImageFromFile(file);
+        // Reset input value to allow same file selection
+        input.value = "";
       } catch (error) {
         console.error("Error adding image:", error);
         // Here you could add user feedback for errors

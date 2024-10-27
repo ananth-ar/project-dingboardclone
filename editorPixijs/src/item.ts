@@ -1,16 +1,19 @@
-// src/Item.ts
+// src/item.ts
 import { Container, Sprite, Texture } from "pixi.js";
 import { MoveCommand, History } from "./commends";
-
+import { SelectionManager } from "./selectionManger";
 
 export class Item extends Container {
-  private sprite: Sprite;
+  public sprite: Sprite;
   private isDragging: boolean = false;
-  private dragData: any = null;
   private dragStartPos: { x: number; y: number } | null = null;
   private dragStartPosition: { x: number; y: number } | null = null;
 
-  constructor(texture: Texture, private history: History) {
+  constructor(
+    texture: Texture,
+    private history: History,
+    private selectionManager: SelectionManager
+  ) {
     super();
 
     if (!texture || !texture.isTexture) {
@@ -26,42 +29,53 @@ export class Item extends Container {
     this.on("pointerdown", this.onDragStart)
       .on("globalpointermove", this.onDragMove)
       .on("pointerup", this.onDragEnd)
-      .on("pointerupoutside", this.onDragEnd);
+      .on("pointerupoutside", this.onDragEnd)
+      .on("click", this.onClick);
   }
+
+  private onClick = (event: any): void => {
+    event.stopPropagation();
+    this.selectionManager.selectItem(this);
+  };
 
   private onDragStart = (event: any): void => {
     event.stopPropagation();
-    this.dragData = event;
     this.isDragging = true;
 
-    // Store the position where the drag started
+    // Get the local position of the click relative to the parent
+    const localPos = this.parent.toLocal(event.global);
     this.dragStartPos = {
-      x: this.dragData.global.x - this.x,
-      y: this.dragData.global.y - this.y,
+      x: localPos.x - this.x,
+      y: localPos.y - this.y,
     };
 
-    // Store the initial position of the item
+    this.selectionManager.selectItem(this);
+    // Store initial position for undo/redo
     this.dragStartPosition = {
       x: this.x,
       y: this.y,
     };
 
-    if (this.parent) {
-      this.parent.addChild(this);
-    }
+    // Optional: Bring to front
+    // if (this.parent) {
+    //   this.parent.addChild(this);
+    // }
   };
 
   private onDragMove = (event: any): void => {
     if (this.isDragging && this.dragStartPos) {
-      const newPosition = event.global;
-      this.x = newPosition.x - this.dragStartPos.x;
-      this.y = newPosition.y - this.dragStartPos.y;
+      // Convert the global position to parent's local space
+      const localPos = this.parent.toLocal(event.global);
+      this.selectionManager.updateSelectionBounds();
+
+      // Update position maintaining the initial offset
+      this.x = localPos.x - this.dragStartPos.x;
+      this.y = localPos.y - this.dragStartPos.y;
     }
   };
 
   private onDragEnd = (): void => {
     if (this.isDragging && this.dragStartPosition) {
-      // Only create a command if the position actually changed
       if (
         this.dragStartPosition.x !== this.x ||
         this.dragStartPosition.y !== this.y
@@ -75,9 +89,7 @@ export class Item extends Container {
     }
 
     this.isDragging = false;
-    this.dragData = null;
     this.dragStartPos = null;
     this.dragStartPosition = null;
   };
 }
-
