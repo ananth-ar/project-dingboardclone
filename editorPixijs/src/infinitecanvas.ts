@@ -136,7 +136,7 @@ export class InfiniteCanvas extends Container {
             this.position.y += cursorY - newScreenPos.y;
 
             this.currentZoom = clampedZoom;
-            this.selectionManager.onCanvasZoomChange(this.currentZoom);
+            this.selectionManager.onCanvasZoomChange();
           }
         }
       },
@@ -170,8 +170,7 @@ export class InfiniteCanvas extends Container {
         const item = new Item(texture, this.history, this.selectionManager);
         this.addChild(item);
         item.x = window.innerWidth / 2;
-        item.y = window.innerHeight / 2;
-    
+        item.y = window.innerHeight / 2;   
 
         // Add the command to history
         const uploadCommand = new ImageUploadCommand(this, item);

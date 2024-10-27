@@ -9,13 +9,13 @@ export class SelectionManager {
   private selectionRect: Graphics;
   private toolbar: Toolbar;
 
-  constructor(private canvas: InfiniteCanvas) {
+  constructor(canvas: InfiniteCanvas) {
     this.selectionRect = new Graphics();
     this.toolbar = new Toolbar(canvas);
     this.selectionRect.zIndex = 1000; // Ensure selection is always on top
   }
 
-  onCanvasZoomChange(zoom: number): void {
+  onCanvasZoomChange(): void {
     if (this.selectedItem && this.toolbar.parent) {
       // Update toolbar scale to counter zoom
       this.updateToolbarScale();
@@ -46,15 +46,12 @@ export class SelectionManager {
 
   selectItem(item: Item): void {
     // Deselect previous item if any
-    // this.clearSelection();
+    this.clearSelection();
 
     this.selectedItem = item;
     this.drawSelectionBounds();
 
-    // Add selection rectangle to the item's parent
-    // if (item.parent) {
-    //   item.parent.addChild(this.selectionRect);
-    // }
+   
     item.addChild(this.selectionRect);
     // Position toolbar
     this.toolbar.positionAboveItem(item);
@@ -94,10 +91,11 @@ export class SelectionManager {
         bounds.height + padding * 2
       )
       .stroke({
-        width: 2 / this.selectedItem.scale.x, // Adjust stroke width for zoom
+        width: 10,
         color: 0x8a2be2,
         alpha: 1,
       });
+   
   }
 
   updateSelectionBounds(): void {
