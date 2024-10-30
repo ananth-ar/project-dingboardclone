@@ -89,6 +89,6 @@ export class Toolbar extends Container {
     );
 
     // Add toolbar to item
-    item.addChild(this);
+    // item.addChild(this);
   }
 }

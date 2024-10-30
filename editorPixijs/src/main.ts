@@ -3,9 +3,9 @@ import { Application } from "pixi.js";
 import { FPSMeter, FPSChart } from "./fps";
 import "./style.css";
 import { InfiniteCanvas } from "./infinitecanvas";
+import { initDevtools } from "@pixi/devtools";
 
 async function initializeApp() {
-
   try {
     const app = new Application();
 
@@ -21,9 +21,9 @@ async function initializeApp() {
     if (!appContainer) throw new Error("#app element not found");
 
     appContainer.appendChild(app.canvas);
-
+    initDevtools({ app });
     // Create and add the infinite canvas
-    const canvas = new InfiniteCanvas();
+    const canvas = new InfiniteCanvas(app);
     app.stage.addChild(canvas);
 
     // Setup window resize handler
@@ -34,17 +34,16 @@ async function initializeApp() {
     // Setup image upload
     setupImageUpload(canvas);
 
-    // Initialize FPS monitoring system
-    const fpsMeter = new FPSMeter();
-    const fpsChart = new FPSChart();
-    app.stage.addChild(fpsChart.graphics);
+    // // Initialize FPS monitoring system
+    // const fpsMeter = new FPSMeter();
+    // const fpsChart = new FPSChart();
+    // app.stage.addChild(fpsChart.graphics);
 
     // Start the FPS monitoring
-    app.ticker.add(() => {
-      const currentFPS = fpsMeter.measure();
-      fpsChart.update(currentFPS);
-    });
-    
+    // app.ticker.add(() => {
+    //   const currentFPS = fpsMeter.measure();
+    //   fpsChart.update(currentFPS);
+    // });
 
     return app;
   } catch (error) {

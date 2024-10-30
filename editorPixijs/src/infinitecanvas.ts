@@ -1,5 +1,5 @@
 // src/infinitecanvas.ts
-import { Container, Assets } from "pixi.js";
+import { Container, Assets, Application } from "pixi.js";
 import { Item } from "./item";
 import { History, ImageUploadCommand } from "./commends";
 import { SelectionManager } from "./selectionManger";
@@ -13,9 +13,9 @@ export class InfiniteCanvas extends Container {
   private history: History;
   private selectionManager: SelectionManager;
 
-  constructor() {
+  constructor(app: Application) {
     super();
-    this.selectionManager = new SelectionManager(this);
+    this.selectionManager = new SelectionManager(this, app);
     this.eventMode = "static";
     this.history = new History(this.selectionManager);
     this.setupPan();
@@ -170,7 +170,7 @@ export class InfiniteCanvas extends Container {
         const item = new Item(texture, this.history, this.selectionManager);
         this.addChild(item);
         item.x = window.innerWidth / 2;
-        item.y = window.innerHeight / 2;   
+        item.y = window.innerHeight / 2;
 
         // Add the command to history
         const uploadCommand = new ImageUploadCommand(this, item);
