@@ -12,6 +12,7 @@ export class InfiniteCanvas extends Container {
   private lastPanPosition: { x: number; y: number } | null = null;
   private history: History;
   private selectionManager: SelectionManager;
+  private isPanModeEnabled: boolean = false;
 
   constructor(app: Application) {
     super();
@@ -21,6 +22,7 @@ export class InfiniteCanvas extends Container {
     this.setupPan();
     this.setupZoom();
     this.setupKeyboardShortcuts();
+    this.createPanButton();
     this.sortableChildren = true; // Enable z-index sorting
     this.hitArea = {
       contains: () => true,
@@ -37,9 +39,10 @@ export class InfiniteCanvas extends Container {
   private setupPan(): void {
     // Setup panning with middle mouse button
     window.addEventListener("pointerdown", (e: PointerEvent) => {
-      // Middle mouse button is 1
-      if (e.button === 1) {
-        e.preventDefault(); // Prevent default browser behavior
+      // Only allow panning in pan mode or with middle button
+      if ((this.isPanModeEnabled && e.button === 2) || e.button === 1) {
+        e.preventDefault();
+        this.selectionManager.clearSelection();
         this.startPanning(e);
       }
     });
@@ -52,7 +55,7 @@ export class InfiniteCanvas extends Container {
     });
 
     window.addEventListener("pointerup", (e: PointerEvent) => {
-      if (e.button === 1) {
+      if ((this.isPanModeEnabled && e.button === 2) || e.button === 1) {
         this.stopPanning();
       }
     });
@@ -60,6 +63,12 @@ export class InfiniteCanvas extends Container {
     // Handle case when mouse leaves window during panning
     window.addEventListener("pointerleave", () => {
       this.stopPanning();
+    });
+
+    window.addEventListener("contextmenu", (e: Event) => {
+      if (this.isPanModeEnabled) {
+        e.preventDefault();
+      }
     });
   }
 
@@ -136,7 +145,7 @@ export class InfiniteCanvas extends Container {
             this.position.y += cursorY - newScreenPos.y;
 
             this.currentZoom = clampedZoom;
-            this.selectionManager.onCanvasZoomChange();
+            this.selectionManager.onCanvasChange();
           }
         }
       },
@@ -199,12 +208,47 @@ export class InfiniteCanvas extends Container {
     }
   }
 
+  public togglePanMode(): void {
+    this.isPanModeEnabled = !this.isPanModeEnabled;
+
+    // Update cursor to indicate mode
+    document.body.style.cursor = this.isPanModeEnabled ? "grab" : "default";
+
+    // Toggle interactivity of all items
+    this.children.forEach((child) => {
+      if (child instanceof Item) {
+        child.eventMode = this.isPanModeEnabled ? "none" : "static";
+      }
+    });
+
+    // Clear selection when entering pan mode
+    if (this.isPanModeEnabled) {
+      this.selectionManager.clearSelection();
+    }
+  }
+
   getSelectedItem(): Item | null {
     return this.selectionManager.getSelectedItem();
   }
 
   get gethistory(): History {
     return this.history;
+  }
+
+  private createPanButton(): void {
+    const button = document.createElement("button");
+    button.textContent = "Pan Mode";
+    button.style.position = "fixed";
+    button.style.top = "50px"; // Position below your file input
+    button.style.left = "10px";
+
+    button.onclick = () => {
+      this.togglePanMode();
+      button.classList.toggle("active");
+      button.textContent = this.isPanModeEnabled ? "Exit Pan Mode" : "Pan Mode";
+    };
+
+    document.body.appendChild(button);
   }
 
   private setupKeyboardShortcuts(): void {

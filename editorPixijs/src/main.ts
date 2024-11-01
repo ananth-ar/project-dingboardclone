@@ -34,16 +34,16 @@ async function initializeApp() {
     // Setup image upload
     setupImageUpload(canvas);
 
-    // // Initialize FPS monitoring system
-    // const fpsMeter = new FPSMeter();
-    // const fpsChart = new FPSChart();
-    // app.stage.addChild(fpsChart.graphics);
+    // Initialize FPS monitoring system
+    const fpsMeter = new FPSMeter();
+    const fpsChart = new FPSChart();
+    app.stage.addChild(fpsChart.graphics);
 
     // Start the FPS monitoring
-    // app.ticker.add(() => {
-    //   const currentFPS = fpsMeter.measure();
-    //   fpsChart.update(currentFPS);
-    // });
+    app.ticker.add(() => {
+      const currentFPS = fpsMeter.measure();
+      fpsChart.update(currentFPS);
+    });
 
     return app;
   } catch (error) {

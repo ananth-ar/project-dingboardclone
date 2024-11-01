@@ -1,6 +1,5 @@
 // src/toolbar.ts
 import { Container, Graphics, Text } from "pixi.js";
-import { Item } from "./item";
 import { InfiniteCanvas } from "./infinitecanvas";
 import { MoveLayerCommand } from "./commends";
 
@@ -80,15 +79,4 @@ export class Toolbar extends Container {
     });
   }
 
-  // Method to position toolbar above selected item
-  positionAboveItem(item: Item): void {
-    // Position toolbar relative to item in local space
-    this.position.set(
-      0,
-      -this.height - 10 // 10px gap above item
-    );
-
-    // Add toolbar to item
-    // item.addChild(this);
-  }
 }

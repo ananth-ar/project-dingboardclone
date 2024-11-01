@@ -22,7 +22,6 @@ export class Item extends Container {
 
     this.sprite = new Sprite(texture);
     this.addChild(this.sprite);
-
     this.eventMode = "static";
     this.cursor = "pointer";
 
@@ -66,11 +65,12 @@ export class Item extends Container {
     if (this.isDragging && this.dragStartPos) {
       // Convert the global position to parent's local space
       const localPos = this.parent.toLocal(event.global);
-      this.selectionManager.updateSelectionBounds();
 
       // Update position maintaining the initial offset
       this.x = localPos.x - this.dragStartPos.x;
       this.y = localPos.y - this.dragStartPos.y;
+
+      this.selectionManager.onCanvasChange();
     }
   };
 

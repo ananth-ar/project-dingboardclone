@@ -8,77 +8,39 @@ export class SelectionManager {
   private selectedItem: Item | null = null;
   private selectionRect: Graphics;
   private toolbar: Toolbar;
+  private rootContainer: Container;
 
   constructor(canvas: InfiniteCanvas, app: Application) {
     this.selectionRect = new Graphics();
     this.toolbar = new Toolbar(canvas);
     this.selectionRect.zIndex = 1000;
     // Add to root stage instead of canvas
+    this.rootContainer = app.stage;
     app.stage.addChild(this.selectionRect);
   }
 
-  onCanvasZoomChange(): void {
+  selectItem(item: Item): void {
+    this.clearSelection();
 
+    this.selectedItem = item;
+    this.updateSelectionBounds();
+    this.updateToolbarPosition();
+
+    if (!this.toolbar.parent) {
+      this.rootContainer.addChild(this.toolbar);
+    }
+  }
+
+  onCanvasChange(): void {
     if (this.selectedItem) {
       // Update toolbar scale to counter zoom
       this.updateSelectionBounds();
+      this.updateToolbarPosition();
       // this.updateToolbarScale();
     }
   }
 
-  private updateToolbarScale(): void {
-    if (this.selectedItem) {
-      // Get the global scale taking into account all transformations
-      const globalScale = this.getGlobalScale(this.selectedItem);
-      this.toolbar.scale.set(1 / globalScale.x, 1 / globalScale.y);
-    }
-  }
-
-  private getGlobalScale(item: Container): { x: number; y: number } {
-    let current = item;
-    let scaleX = 1;
-    let scaleY = 1;
-
-    while (current) {
-      scaleX *= current.scale.x;
-      scaleY *= current.scale.y;
-      current = current.parent;
-    }
-
-    return { x: scaleX, y: scaleY };
-  }
-
-  selectItem(item: Item): void {
-    // Deselect previous item if any
-    this.clearSelection();
-
-    this.selectedItem = item;
-    this.drawSelectionBounds();
-
-    // item.addChild(this.selectionRect);
-    // Position toolbar
-    this.toolbar.positionAboveItem(item);
-
-    // Ensure correct initial scale
-    // this.updateToolbarScale();
-  }
-
-  clearSelection(): void {
-    if (this.selectionRect.parent) {
-      // No need to remove since it stays in stage, just clear the graphics
-      this.selectionRect.clear();
-    }
-    if (this.toolbar.parent) {
-      this.toolbar.parent.removeChild(this.toolbar);
-    }
-    this.selectedItem = null;
-  }
-
-  getSelectedItem(): Item | null {
-    return this.selectedItem;
-  }
-
-  private drawSelectionBounds(): void {
+  private updateSelectionBounds(): void {
     if (!this.selectedItem) return;
 
     // Get bounds in local space
@@ -107,12 +69,36 @@ export class SelectionManager {
       });
   }
 
-  updateSelectionBounds(): void {
-    if (this.selectedItem) {
-      this.drawSelectionBounds();
+  private updateToolbarPosition(): void {
+    if (!this.selectedItem) return;
 
-      // No need to update toolbar position as it's now relative to the item
-      // and will move with it automatically
+    const localBounds = this.selectedItem.sprite.getLocalBounds();
+
+    // Get the center point of the item in global space
+    const centerTop = this.selectedItem.toGlobal({
+      x: localBounds.width / 2, // center x
+      y: 0, // top y
+    });
+
+    // Position toolbar centered above the item
+    this.toolbar.position.set(
+      centerTop.x - this.toolbar.width / 2, // center the toolbar
+      centerTop.y - this.toolbar.height - 10 // 10px padding above
+    );
+  }
+
+  clearSelection(): void {
+    if (this.selectionRect.parent) {
+      // No need to remove since it stays in stage, just clear the graphics
+      this.selectionRect.clear();
     }
+    if (this.toolbar.parent) {
+      this.toolbar.parent.removeChild(this.toolbar);
+    }
+    this.selectedItem = null;
+  }
+
+  getSelectedItem(): Item | null {
+    return this.selectedItem;
   }
 }
