@@ -115,3 +115,31 @@ export class MoveLayerCommand implements Command {
     this.canvas.setChildIndex(this.item, this.oldIndex);
   }
 }
+
+export class ResizeCommand implements Command {
+  constructor(
+    private item: Item,
+    private oldState: {
+      x: number;
+      y: number;
+      scale: { x: number; y: number };
+    },
+    private newState: {
+      x: number;
+      y: number;
+      scale: { x: number; y: number };
+    }
+  ) {}
+
+  execute(): void {
+    this.item.x = this.newState.x;
+    this.item.y = this.newState.y;
+    this.item.sprite.scale.set(this.newState.scale.x, this.newState.scale.y);
+  }
+
+  undo(): void {
+    this.item.x = this.oldState.x;
+    this.item.y = this.oldState.y;
+    this.item.sprite.scale.set(this.oldState.scale.x, this.oldState.scale.y);
+  }
+}
