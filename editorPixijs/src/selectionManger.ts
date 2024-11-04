@@ -65,12 +65,20 @@ export class SelectionManager {
   private updateSelectionBounds(): void {
     if (!this.selectedItem) return;
 
-    const localBounds = this.selectedItem.sprite.getLocalBounds();
+    const localBounds = this.selectedItem.sprite.getBounds();
     const topLeft = this.selectedItem.toGlobal({ x: 0, y: 0 });
     const bottomRight = this.selectedItem.toGlobal({
       x: localBounds.width,
       y: localBounds.height,
     });
+    
+    console.log(
+      "sprite width height",
+      this.selectedItem.sprite.width,
+      this.selectedItem.sprite.height,
+      " local bounds ",
+      localBounds
+    );
 
     // Update selection rectangle
     this.selectionRect
@@ -104,7 +112,7 @@ export class SelectionManager {
   private updateToolbarPosition(): void {
     if (!this.selectedItem) return;
 
-    const localBounds = this.selectedItem.sprite.getLocalBounds();
+    const localBounds = this.selectedItem.sprite.getBounds();
 
     // Get the center point of the item in global space
     const centerTop = this.selectedItem.toGlobal({
@@ -223,15 +231,35 @@ export class SelectionManager {
     // Apply minimum size constraint
     const minSize = 20;
     if (newWidth >= minSize && newHeight >= minSize) {
-      this.resizeItemFromOriginal(
+      // Direct sprite manipulation for smooth resize
+      this.quickResize(
         this.selectedItem,
-        Math.round(newWidth), // Round to prevent fractional pixels
+        Math.round(newWidth),
         Math.round(newHeight),
         newX,
         newY
       );
     }
   };
+
+  // New method for quick resize during drag
+  private quickResize(
+    item: Item,
+    width: number,
+    height: number,
+    x: number,
+    y: number
+  ): void {
+    // Directly modify sprite dimensions - very lightweight
+    item.sprite.width = width;
+    item.sprite.height = height;
+    item.x = x;
+    item.y = y;
+
+    // Update bounds and toolbar
+    this.updateSelectionBounds();
+    this.updateToolbarPosition();
+  }
 
   private resizeItemFromOriginal(
     item: Item,
@@ -271,27 +299,42 @@ export class SelectionManager {
   }
 
   private onResizeEnd = (): void => {
-    // if (this.isResizing && this.selectedItem && this.resizeStartData) {
-    //   // Create resize command for undo/redo
-    //   const resizeCommand = new ResizeCommand(
-    //     this.selectedItem,
-    //     {
-    //       x: this.resizeStartData.x,
-    //       y: this.resizeStartData.y,
-    //       scale: this.resizeStartData.scale,
-    //     },
-    //     {
-    //       x: this.selectedItem.x,
-    //       y: this.selectedItem.y,
-    //       scale: {
-    //         x: this.selectedItem.sprite.scale.x,
-    //         y: this.selectedItem.sprite.scale.y,
-    //       },
-    //     }
-    //   );
+    if (this.isResizing && this.selectedItem && this.resizeStartData) {
+      // Get current dimensions after drag
+      const finalWidth = this.selectedItem.sprite.width;
+      const finalHeight = this.selectedItem.sprite.height;
+      const finalX = this.selectedItem.x;
+      const finalY = this.selectedItem.y;
 
-    //   this.selectedItem.history.execute(resizeCommand);
-    // }
+      // Apply high-quality resize
+      this.resizeItemFromOriginal(
+        this.selectedItem,
+        finalWidth,
+        finalHeight,
+        finalX,
+        finalY
+      );
+
+      // // Create resize command for undo/redo
+      // const resizeCommand = new ResizeCommand(
+      //   this.selectedItem,
+      //   {
+      //     x: this.resizeStartData.x,
+      //     y: this.resizeStartData.y,
+      //     scale: this.resizeStartData.scale,
+      //   },
+      //   {
+      //     x: finalX,
+      //     y: finalY,
+      //     scale: {
+      //       x: this.selectedItem.sprite.scale.x,
+      //       y: this.selectedItem.sprite.scale.y,
+      //     },
+      //   }
+      // );
+      //
+      // this.selectedItem.history.execute(resizeCommand);
+    }
 
     this.isResizing = false;
     this.activeHandle = -1;

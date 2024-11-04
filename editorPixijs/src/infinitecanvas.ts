@@ -111,6 +111,7 @@ export class InfiniteCanvas extends Container {
         // Only handle zoom when Ctrl is pressed
         if (e.ctrlKey) {
           e.preventDefault(); // Prevent browser zoom
+          this.selectionManager.clearSelection();
 
           // Calculate zoom direction and factor
           const delta = -Math.sign(e.deltaY);
