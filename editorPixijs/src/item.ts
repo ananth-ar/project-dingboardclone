@@ -8,6 +8,7 @@ export class Item extends Container {
   private isDragging: boolean = false;
   private dragStartPos: { x: number; y: number } | null = null;
   private dragStartPosition: { x: number; y: number } | null = null;
+   originalTexture: Texture;
 
   constructor(
     texture: Texture,
@@ -19,7 +20,7 @@ export class Item extends Container {
     if (!texture || !texture.isTexture) {
       throw new Error("Invalid texture provided to Item");
     }
-
+    this.originalTexture = texture;
     this.sprite = new Sprite(texture);
     this.addChild(this.sprite);
     this.eventMode = "static";

@@ -1,5 +1,11 @@
 // src/selectionManger.ts
-import { Application, Container, Graphics } from "pixi.js";
+import {
+  Application,
+  Container,
+  Graphics,
+  RenderTexture,
+  Sprite,
+} from "pixi.js";
 import { Item } from "./item";
 import { Toolbar } from "./toolbar";
 import { InfiniteCanvas } from "./infinitecanvas";
@@ -10,6 +16,7 @@ export class SelectionManager {
   private selectionRect: Graphics;
   private toolbar: Toolbar;
   private rootContainer: Container;
+  private app: Application;
   private resizeHandles: Graphics[] = [];
   private handleSize = 10; // Size of resize dots
   private isResizing: boolean = false;
@@ -27,7 +34,9 @@ export class SelectionManager {
     this.selectionRect = new Graphics();
     this.toolbar = new Toolbar(canvas);
     this.selectionRect.zIndex = 1000;
+
     // Add to root stage instead of canvas
+    this.app = app;
     this.rootContainer = app.stage;
     app.stage.addChild(this.selectionRect);
   }
@@ -127,6 +136,7 @@ export class SelectionManager {
       handle.eventMode = "static";
       handle.cursor = this.getHandleCursor(i); // We'll create this method
       handle.zIndex = 1001;
+      this.setupResizeHandle(handle, i);
       this.rootContainer.addChild(handle);
       this.resizeHandles.push(handle);
     }
@@ -162,7 +172,6 @@ export class SelectionManager {
     e.stopPropagation(); // Prevent other interactions
     this.isResizing = true;
     this.activeHandle = handleIndex;
-
     const sprite = this.selectedItem.sprite;
     const bounds = sprite.getBounds();
 
@@ -211,27 +220,55 @@ export class SelectionManager {
         break;
     }
 
-    // Ensure minimum size
+    // Apply minimum size constraint
     const minSize = 20;
     if (newWidth >= minSize && newHeight >= minSize) {
-      // Calculate new scale
-      const sprite = this.selectedItem.sprite;
-      const baseWidth = sprite.texture.width;
-      const baseHeight = sprite.texture.height;
-
-      const scaleX = newWidth / baseWidth;
-      const scaleY = newHeight / baseHeight;
-
-      // Apply new position and scale
-      this.selectedItem.x = newX;
-      this.selectedItem.y = newY;
-      sprite.scale.set(scaleX, scaleY);
-
-      // Update selection bounds and handles
-      this.updateSelectionBounds();
-      this.updateToolbarPosition();
+      this.resizeItemFromOriginal(
+        this.selectedItem,
+        Math.round(newWidth), // Round to prevent fractional pixels
+        Math.round(newHeight),
+        newX,
+        newY
+      );
     }
   };
+
+  private resizeItemFromOriginal(
+    item: Item,
+    targetWidth: number,
+    targetHeight: number,
+    newX: number,
+    newY: number
+  ): void {
+    // Create a temporary sprite with original texture
+    const tempSprite = new Sprite(item.originalTexture);
+
+    // Create a RenderTexture at target size
+    const renderTexture = RenderTexture.create({
+      width: targetWidth,
+      height: targetHeight,
+    });
+
+    // Set tempSprite to target dimensions
+    tempSprite.width = targetWidth;
+    tempSprite.height = targetHeight;
+
+    // Render tempSprite to the new texture
+    // Using renderer singleton from app
+    this.app.renderer.render(tempSprite, { renderTexture });
+
+    // Update sprite
+    item.sprite.texture = renderTexture;
+    item.x = newX;
+    item.y = newY;
+
+    // Clean up
+    tempSprite.destroy();
+
+    // Update bounds and toolbar
+    this.updateSelectionBounds();
+    this.updateToolbarPosition();
+  }
 
   private onResizeEnd = (): void => {
     // if (this.isResizing && this.selectedItem && this.resizeStartData) {
