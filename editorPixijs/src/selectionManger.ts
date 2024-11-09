@@ -64,30 +64,14 @@ export class SelectionManager {
 
   private updateSelectionBounds(): void {
     if (!this.selectedItem) return;
-
     const bounds = this.selectedItem.sprite.getBounds();
-    const topLeft = this.selectedItem.toGlobal({ x: 0, y: 0 });
-    const bottomRight = this.selectedItem.toGlobal({
-      x: bounds.width,
-      y: bounds.height,
-    });
 
-    console.log(
-      "sprite width height",
-      this.selectedItem.sprite.width,
-      this.selectedItem.sprite.height,
-      " local bounds ",
-      bounds
-    );
+    console.log("bounds ", bounds);
 
     // Update selection rectangle
     this.selectionRect
       .clear()
       .rect(
-        // topLeft.x,
-        // topLeft.y,
-        // bottomRight.x - topLeft.x,
-        // bottomRight.y - topLeft.y
         bounds.x, // Use bounds directly
         bounds.y, // Use bounds directly
         bounds.width, // Use width from bounds
@@ -242,6 +226,7 @@ export class SelectionManager {
       );
     }
   };
+
   private onResizeEnd = (): void => {
     if (this.isResizing && this.selectedItem && this.resizeStartData) {
       // Get current dimensions after drag
