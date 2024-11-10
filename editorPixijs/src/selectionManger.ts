@@ -1,11 +1,5 @@
 // src/selectionManger.ts
-import {
-  Application,
-  Container,
-  Graphics,
-  RenderTexture,
-  Sprite,
-} from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 import { Item } from "./item";
 import { Toolbar } from "./toolbar";
 import { InfiniteCanvas } from "./infinitecanvas";
@@ -16,7 +10,6 @@ export class SelectionManager {
   private selectionRect: Graphics;
   private toolbar: Toolbar;
   private rootContainer: Container;
-  private app: Application;
   private resizeHandles: Graphics[] = [];
   private handleSize = 10; // Size of resize dots
   private isResizing: boolean = false;
@@ -35,8 +28,6 @@ export class SelectionManager {
     this.toolbar = new Toolbar(canvas);
     this.selectionRect.zIndex = 1000;
 
-    // Add to root stage instead of canvas
-    this.app = app;
     this.rootContainer = app.stage;
     app.stage.addChild(this.selectionRect);
   }
@@ -65,8 +56,6 @@ export class SelectionManager {
   private updateSelectionBounds(): void {
     if (!this.selectedItem) return;
     const bounds = this.selectedItem.sprite.getBounds();
-
-    console.log("bounds ", bounds);
 
     // Update selection rectangle
     this.selectionRect
@@ -162,18 +151,21 @@ export class SelectionManager {
   private onResizeStart = (e: any, handleIndex: number): void => {
     if (!this.selectedItem) return;
 
-    e.stopPropagation(); // Prevent other interactions
+    e.stopPropagation();
     this.isResizing = true;
     this.activeHandle = handleIndex;
     const sprite = this.selectedItem.sprite;
-    const bounds = sprite.getBounds();
+
+    // Get the position in canvas's local space
+    const localPos = this.selectedItem.parent.toLocal(e.global);
+    console.log("Local position:", localPos);
 
     this.resizeStartData = {
-      width: bounds.width,
-      height: bounds.height,
+      width: sprite.width,
+      height: sprite.height,
       x: this.selectedItem.x,
       y: this.selectedItem.y,
-      globalStart: { x: e.global.x, y: e.global.y },
+      globalStart: localPos, // Store the start position in canvas's local space
       scale: { x: sprite.scale.x, y: sprite.scale.y },
     };
   };
@@ -181,8 +173,12 @@ export class SelectionManager {
   private onResizeMove = (e: any): void => {
     if (!this.isResizing || !this.selectedItem || !this.resizeStartData) return;
 
-    const dx = e.global.x - this.resizeStartData.globalStart.x;
-    const dy = e.global.y - this.resizeStartData.globalStart.y;
+    // Convert current mouse position to canvas's local space
+    const localPos = this.selectedItem.parent.toLocal(e.global);
+
+    // Calculate deltas in local space
+    const dx = localPos.x - this.resizeStartData.globalStart.x;
+    const dy = localPos.y - this.resizeStartData.globalStart.y;
 
     // Calculate new dimensions based on handle position
     let newWidth = this.resizeStartData.width;
@@ -190,85 +186,109 @@ export class SelectionManager {
     let newX = this.resizeStartData.x;
     let newY = this.resizeStartData.y;
 
+    // Aspect ratio of the original image
+    const aspectRatio =
+      this.resizeStartData.width / this.resizeStartData.height;
+
     switch (this.activeHandle) {
       case 0: // Top-left
-        newWidth = this.resizeStartData.width - dx;
-        newHeight = this.resizeStartData.height - dy;
-        newX = this.resizeStartData.x + dx;
-        newY = this.resizeStartData.y + dy;
+        if (e.shiftKey) {
+          // Maintain aspect ratio when shift is held
+          const avgDelta = (dx + dy) / 2;
+          newWidth = this.resizeStartData.width - avgDelta;
+          newHeight = newWidth / aspectRatio;
+          newX =
+            this.resizeStartData.x + (this.resizeStartData.width - newWidth);
+          newY =
+            this.resizeStartData.y + (this.resizeStartData.height - newHeight);
+        } else {
+          newWidth = this.resizeStartData.width - dx;
+          newHeight = this.resizeStartData.height - dy;
+          newX = this.resizeStartData.x + dx;
+          newY = this.resizeStartData.y + dy;
+        }
         break;
+
       case 1: // Top-right
-        newWidth = this.resizeStartData.width + dx;
-        newHeight = this.resizeStartData.height - dy;
-        newY = this.resizeStartData.y + dy;
+        if (e.shiftKey) {
+          const avgDelta = (-dx + dy) / 2;
+          newWidth = this.resizeStartData.width + avgDelta;
+          newHeight = newWidth / aspectRatio;
+          newY =
+            this.resizeStartData.y + (this.resizeStartData.height - newHeight);
+        } else {
+          newWidth = this.resizeStartData.width + dx;
+          newHeight = this.resizeStartData.height - dy;
+          newY = this.resizeStartData.y + dy;
+        }
         break;
+
       case 2: // Bottom-right
-        newWidth = this.resizeStartData.width + dx;
-        newHeight = this.resizeStartData.height + dy;
+        if (e.shiftKey) {
+          const avgDelta = (dx + dy) / 2;
+          newWidth = this.resizeStartData.width + avgDelta;
+          newHeight = newWidth / aspectRatio;
+        } else {
+          newWidth = this.resizeStartData.width + dx;
+          newHeight = this.resizeStartData.height + dy;
+        }
         break;
+
       case 3: // Bottom-left
-        newWidth = this.resizeStartData.width - dx;
-        newHeight = this.resizeStartData.height + dy;
-        newX = this.resizeStartData.x + dx;
+        if (e.shiftKey) {
+          const avgDelta = (-dx + dy) / 2;
+          newWidth = this.resizeStartData.width + avgDelta;
+          newHeight = newWidth / aspectRatio;
+          newX =
+            this.resizeStartData.x + (this.resizeStartData.width - newWidth);
+        } else {
+          newWidth = this.resizeStartData.width - dx;
+          newHeight = this.resizeStartData.height + dy;
+          newX = this.resizeStartData.x + dx;
+        }
         break;
     }
 
     // Apply minimum size constraint
     const minSize = 20;
     if (newWidth >= minSize && newHeight >= minSize) {
-      // Direct sprite manipulation for smooth resize
+      // Ensure positions are rounded to prevent blurry rendering
       this.quickResize(
         this.selectedItem,
         Math.round(newWidth),
         Math.round(newHeight),
-        newX,
-        newY
+        Math.round(newX),
+        Math.round(newY)
       );
     }
   };
 
   private onResizeEnd = (): void => {
     if (this.isResizing && this.selectedItem && this.resizeStartData) {
-      // Get current dimensions after drag
-      const finalWidth = this.selectedItem.sprite.width;
-      const finalHeight = this.selectedItem.sprite.height;
-      const finalX = this.selectedItem.x;
-      const finalY = this.selectedItem.y;
-
-      // Apply high-quality resize
-      this.resizeItemFromOriginal(
+      // Create resize command with actual dimensions
+      const resizeCommand = new ResizeCommand(
         this.selectedItem,
-        finalWidth,
-        finalHeight,
-        finalX,
-        finalY
+        {
+          x: this.resizeStartData.x,
+          y: this.resizeStartData.y,
+          width: this.resizeStartData.width, // Use actual start dimensions
+          height: this.resizeStartData.height,
+        },
+        {
+          x: this.selectedItem.x,
+          y: this.selectedItem.y,
+          width: this.selectedItem.sprite.width, // Use final dimensions
+          height: this.selectedItem.sprite.height,
+        }
       );
-
-      // // Create resize command for undo/redo
-      // const resizeCommand = new ResizeCommand(
-      //   this.selectedItem,
-      //   {
-      //     x: this.resizeStartData.x,
-      //     y: this.resizeStartData.y,
-      //     scale: this.resizeStartData.scale,
-      //   },
-      //   {
-      //     x: finalX,
-      //     y: finalY,
-      //     scale: {
-      //       x: this.selectedItem.sprite.scale.x,
-      //       y: this.selectedItem.sprite.scale.y,
-      //     },
-      //   }
-      // );
-      //
-      // this.selectedItem.history.execute(resizeCommand);
+      this.selectedItem.getHistory().execute(resizeCommand);
     }
 
     this.isResizing = false;
     this.activeHandle = -1;
     this.resizeStartData = null;
   };
+
   // New method for quick resize during drag
   private quickResize(
     item: Item,
@@ -282,43 +302,6 @@ export class SelectionManager {
     item.sprite.height = height;
     item.x = x;
     item.y = y;
-
-    // Update bounds and toolbar
-    this.updateSelectionBounds();
-    this.updateToolbarPosition();
-  }
-
-  private resizeItemFromOriginal(
-    item: Item,
-    targetWidth: number,
-    targetHeight: number,
-    newX: number,
-    newY: number
-  ): void {
-    // Create a temporary sprite with original texture
-    const tempSprite = new Sprite(item.originalTexture);
-
-    // Create a RenderTexture at target size
-    const renderTexture = RenderTexture.create({
-      width: targetWidth,
-      height: targetHeight,
-    });
-
-    // Set tempSprite to target dimensions
-    tempSprite.width = targetWidth;
-    tempSprite.height = targetHeight;
-
-    // Render tempSprite to the new texture
-    // Using renderer singleton from app
-    this.app.renderer.render(tempSprite, { renderTexture });
-
-    // Update sprite
-    item.sprite.texture = renderTexture;
-    item.x = newX;
-    item.y = newY;
-
-    // Clean up
-    tempSprite.destroy();
 
     // Update bounds and toolbar
     this.updateSelectionBounds();

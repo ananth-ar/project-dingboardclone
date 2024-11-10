@@ -8,7 +8,7 @@ export class Item extends Container {
   private isDragging: boolean = false;
   private dragStartPos: { x: number; y: number } | null = null;
   private dragStartPosition: { x: number; y: number } | null = null;
-   originalTexture: Texture;
+  originalTexture: Texture;
 
   constructor(
     texture: Texture,
@@ -55,11 +55,6 @@ export class Item extends Container {
       x: this.x,
       y: this.y,
     };
-
-    // Optional: Bring to front
-    // if (this.parent) {
-    //   this.parent.addChild(this);
-    // }
   };
 
   private onDragMove = (event: any): void => {
@@ -93,4 +88,8 @@ export class Item extends Container {
     this.dragStartPos = null;
     this.dragStartPosition = null;
   };
+
+  public getHistory(): History {
+    return this.history;
+  }
 }

@@ -1,5 +1,5 @@
 // src/infinitecanvas.ts
-import { Container, Assets, Application } from "pixi.js";
+import { Container, Assets, Application, FederatedPointerEvent } from "pixi.js";
 import { Item } from "./item";
 import { History, ImageUploadCommand } from "./commends";
 import { SelectionManager } from "./selectionManger";
@@ -13,9 +13,11 @@ export class InfiniteCanvas extends Container {
   private history: History;
   private selectionManager: SelectionManager;
   private isPanModeEnabled: boolean = false;
+  private app: Application; // Add this line
 
   constructor(app: Application) {
     super();
+    this.app = app; // Add this line
     this.selectionManager = new SelectionManager(this, app);
     this.eventMode = "static";
     this.history = new History(this.selectionManager);
@@ -27,6 +29,7 @@ export class InfiniteCanvas extends Container {
     this.hitArea = {
       contains: () => true,
     };
+    this.setupCoordinateLogger();
 
     this.on("click", (event: any) => {
       // Only clear if the click was directly on the canvas
@@ -104,46 +107,32 @@ export class InfiniteCanvas extends Container {
   }
 
   private setupZoom(): void {
-    // Using wheel event instead of mousewheel (deprecated)
     window.addEventListener(
       "wheel",
       (e: WheelEvent) => {
-        // Only handle zoom when Ctrl is pressed
         if (e.ctrlKey) {
-          e.preventDefault(); // Prevent browser zoom
+          e.preventDefault();
           this.selectionManager.clearSelection();
 
-          // Calculate zoom direction and factor
           const delta = -Math.sign(e.deltaY);
-          const zoomFactor = 1.1; // 10% zoom per step
-
-          // Calculate new zoom level
+          const zoomFactor = 1.1;
           const newZoom =
             this.currentZoom * (delta > 0 ? zoomFactor : 1 / zoomFactor);
-
-          // Clamp zoom level between min and max
           const clampedZoom = Math.min(
             Math.max(newZoom, this.minZoom),
             this.maxZoom
           );
 
           if (clampedZoom !== this.currentZoom) {
-            // Get cursor position in screen space
-            const cursorX = e.clientX;
-            const cursorY = e.clientY;
-
-            // Convert screen coordinates to world coordinates before zoom
-            const worldPos = this.toLocal({ x: cursorX, y: cursorY });
-
-            // Update container scale
+            // Convert screen coordinates to global PixiJS coordinates
+            const globalPoint = this.app.renderer.events.pointer;
+  
+            const beforeZoom = this.toLocal(globalPoint);
             this.scale.set(clampedZoom);
+            const afterZoom = this.toGlobal(beforeZoom);
 
-            // Calculate new world position after zoom
-            const newScreenPos = this.toGlobal(worldPos);
-
-            // Adjust position to maintain cursor point
-            this.position.x += cursorX - newScreenPos.x;
-            this.position.y += cursorY - newScreenPos.y;
+            this.position.x += globalPoint.x - afterZoom.x;
+            this.position.y += globalPoint.y - afterZoom.y;
 
             this.currentZoom = clampedZoom;
             this.selectionManager.onCanvasChange();
@@ -151,7 +140,7 @@ export class InfiniteCanvas extends Container {
         }
       },
       { passive: false }
-    ); // passive: false allows preventDefault()
+    );
   }
 
   async addImageFromFile(file: File): Promise<Item> {
@@ -179,8 +168,10 @@ export class InfiniteCanvas extends Container {
 
         const item = new Item(texture, this.history, this.selectionManager);
         this.addChild(item);
-        item.x = window.innerWidth / 2;
-        item.y = window.innerHeight / 2;
+        // item.x = window.innerWidth / 2;
+        // item.y = window.innerHeight / 2;
+        item.x = 100;
+        item.y = 100;
 
         // Add the command to history
         const uploadCommand = new ImageUploadCommand(this, item);
@@ -269,6 +260,35 @@ export class InfiniteCanvas extends Container {
         e.preventDefault();
         this.history.redo();
       }
+    });
+  }
+
+  private setupCoordinateLogger(): void {
+    // Using pointerdown event since it works for both mouse and touch
+    window.addEventListener("pointerdown", (e: PointerEvent) => {
+      // Screen coordinates (browser viewport)
+      console.log("Screen Coordinates:", {
+        screen_x: e.clientX,
+        screen_y: e.clientY,
+      });
+    });
+
+    // PIXI specific event for global coordinates
+    this.on("pointerdown", (e: FederatedPointerEvent) => {
+      // Global coordinates (PIXI canvas)
+      console.log("PIXI Global Coordinates:", {
+        global_x: e.global.x,
+        global_y: e.global.y,
+        // Also log local coordinates relative to canvas
+        local_x: e.getLocalPosition(this).x,
+        local_y: e.getLocalPosition(this).y,
+      });
+
+      // Log the difference
+      // console.log("Coordinate Difference:", {
+      //   diff_x: e.global.x - e.clientX,
+      //   diff_y: e.global.y - e.clientY,
+      // });
     });
   }
 }
