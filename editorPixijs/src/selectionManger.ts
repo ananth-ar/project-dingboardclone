@@ -1,5 +1,5 @@
 // src/selectionManger.ts
-import { Application, Container, Graphics } from "pixi.js";
+import { Application, Container, FederatedPointerEvent, Graphics, Rectangle } from "pixi.js";
 import { Item } from "./item";
 import { Toolbar } from "./toolbar";
 import { InfiniteCanvas } from "./infinitecanvas";
@@ -22,6 +22,9 @@ export class SelectionManager {
     globalStart: { x: number; y: number };
     scale: { x: number; y: number };
   } | null = null;
+  private selectionDragRect: Graphics; // For the drag selection rectangle
+  private isDragSelecting: boolean = false;
+  private dragStartPoint: { x: number; y: number } | null = null;
 
   constructor(canvas: InfiniteCanvas, app: Application) {
     this.selectionRect = new Graphics();
@@ -30,6 +33,99 @@ export class SelectionManager {
 
     this.rootContainer = app.stage;
     app.stage.addChild(this.selectionRect);
+    this.selectionDragRect = new Graphics();
+    this.selectionDragRect.zIndex = 999; // Below selection handles but above items
+    this.rootContainer.addChild(this.selectionDragRect);
+
+    // Setup drag selection events on canvas
+    canvas
+      .on("pointerdown", this.onDragSelectStart)
+      .on("globalpointermove", this.onDragSelectMove)
+      .on("pointerup", this.onDragSelectEnd)
+      .on("pointerupoutside", this.onDragSelectEnd);
+  }
+
+  private onDragSelectStart = (event: FederatedPointerEvent): void => {
+    // Only start on left click and not when over an item
+    if (event.button !== 0 || event.target !== event.currentTarget) return;
+
+    const localPos = (event.currentTarget as Container).toLocal(event.global);
+    this.isDragSelecting = true;
+    this.dragStartPoint = localPos;
+
+    // Clear any existing selection
+    this.clearSelection();
+  };
+
+  private onDragSelectMove = (event: FederatedPointerEvent): void => {
+    if (!this.isDragSelecting || !this.dragStartPoint) return;
+
+    // Get current position in canvas space
+    const currentPos = (
+      (this.selectedItem?.parent as Container) || this.rootContainer
+    ).toLocal(event.global);
+
+    // Calculate bounds for selection rectangle
+    const bounds = {
+      x: Math.min(this.dragStartPoint.x, currentPos.x),
+      y: Math.min(this.dragStartPoint.y, currentPos.y),
+      width: Math.abs(currentPos.x - this.dragStartPoint.x),
+      height: Math.abs(currentPos.y - this.dragStartPoint.y),
+    };
+
+    // Draw selection rectangle
+    this.selectionDragRect
+      .clear()
+      .rect(bounds.x, bounds.y, bounds.width, bounds.height)
+      .fill({ color: 0x8a2be2, alpha: 0.1 })
+      .stroke({ width: 1, color: 0x8a2be2, alpha: 0.8 });
+
+    // Find intersecting items
+    const intersectingItems = this.findIntersectingItems(bounds);
+
+    // If we have exactly one intersecting item, select it normally
+    if (intersectingItems.length === 1) {
+      this.selectItem(intersectingItems[0]);
+    }
+    // We'll handle multiple items in the next implementation phase
+  };
+
+  private onDragSelectEnd = (): void => {
+    this.isDragSelecting = false;
+    this.dragStartPoint = null;
+    this.selectionDragRect.clear();
+  };
+
+  private findIntersectingItems(selectionBounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Item[] {
+    const items: Item[] = [];
+
+    // Convert selection bounds to a PIXI Rectangle for intersection tests
+    const selectionRect = new Rectangle(
+      selectionBounds.x,
+      selectionBounds.y,
+      selectionBounds.width,
+      selectionBounds.height
+    );
+
+    // Check all children of the canvas
+    (this.rootContainer as InfiniteCanvas).children.forEach((child) => {
+      if (child instanceof Item) {
+        // Get item bounds in canvas space
+        const itemBounds = child.getBounds();
+
+        // Check intersection
+        // if (itemBounds.intersects(selectionRect)) {
+        //   items.push(child);
+        // }
+      }
+    });
+
+    return items;
   }
 
   selectItem(item: Item): void {
