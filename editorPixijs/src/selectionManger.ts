@@ -1,5 +1,10 @@
 // src/selectionManger.ts
-import { Application, Container, FederatedPointerEvent, Graphics, Rectangle } from "pixi.js";
+import {
+  Application,
+  Container,
+  FederatedPointerEvent,
+  Graphics,
+} from "pixi.js";
 import { Item } from "./item";
 import { Toolbar } from "./toolbar";
 import { InfiniteCanvas } from "./infinitecanvas";
@@ -96,7 +101,7 @@ export class SelectionManager {
     this.selectionDragRect.clear();
   };
 
-  private findIntersectingItems(selectionBounds: {
+  private findIntersectingItems(_: {
     x: number;
     y: number;
     width: number;
@@ -105,19 +110,18 @@ export class SelectionManager {
     const items: Item[] = [];
 
     // Convert selection bounds to a PIXI Rectangle for intersection tests
-    const selectionRect = new Rectangle(
-      selectionBounds.x,
-      selectionBounds.y,
-      selectionBounds.width,
-      selectionBounds.height
-    );
+    // const selectionRect = new Rectangle(
+    //   selectionBounds.x,
+    //   selectionBounds.y,
+    //   selectionBounds.width,
+    //   selectionBounds.height
+    // );
 
     // Check all children of the canvas
     (this.rootContainer as InfiniteCanvas).children.forEach((child) => {
       if (child instanceof Item) {
         // Get item bounds in canvas space
-        const itemBounds = child.getBounds();
-
+        // const itemBounds = child.getBounds();
         // Check intersection
         // if (itemBounds.intersects(selectionRect)) {
         //   items.push(child);

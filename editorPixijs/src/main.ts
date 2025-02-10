@@ -78,6 +78,11 @@ function setupImageUpload(canvas: InfiniteCanvas) {
 }
 
 // Initialize the application
-const appInstance = await initializeApp();
+let app: Application;
+(async () => {
+  app = await initializeApp();
+})().catch((error) => {
+  console.error("Failed to initialize application:", error);
+});
 
-export { appInstance as app };
+export { app };
