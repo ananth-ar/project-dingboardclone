@@ -1,6 +1,6 @@
-# DingBoard Clone(unfinished)
+# DingBoard Clone
+A simple image editor using PixiJS and vanilla TypeScript(unfinished)
 
-A simple image editor using PixiJS and vanilla TypeScript
 
 ## Quick Start
 ```bash
